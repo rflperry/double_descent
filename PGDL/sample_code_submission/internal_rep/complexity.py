@@ -5,6 +5,8 @@ from tensorflow import keras
 from collections import defaultdict
 
 import numba
+from tqdm import tqdm
+import datetime
 
 from tensorflow.keras.models import load_model
 import matplotlib.pyplot as plt
@@ -69,12 +71,15 @@ def complexityIR(model, dataset, program_dir=None, method="KF-raw"):
 	batchSize = 50
 	N = computeOver//batchSize
 	
-	
+	print("******** Getting polytopes ", datetime.datetime.now().time())
 	poly_m = get_polytope(model, dataset, computeOver=500, batchSize=50)
 	# poly_m = polytope_activations(model, dataset)
-	print("********", poly_m.shape, np.unique(poly_m).shape) 
+	print("******** Polytope Shapes: ", poly_m.shape, np.unique(poly_m).shape) 
 
+	print("******** Getting matrix ", datetime.datetime.now().time())
 	L_mat, gen_err = ger_matrix_from_poly(model, dataset, poly_m)
+
+	print("******** Getting complexity ", datetime.datetime.now().time())
 	complexity_dict = compute_complexity(L_mat, k=1)
 
 	if method in complexity_dict:
@@ -95,7 +100,8 @@ def get_polytope(model, dataset, computeOver=500, batchSize=50):
 	polytope_memberships_list = []
 
 	# for batch in batches:
-	for x, y in dataset.batch(500): # parallelize
+	print(dir(model.layers[0]))
+	for x, y in tqdm(dataset.batch(500)): # parallelize
 
 		batch_ = x
 		n_prior_relus = 0
