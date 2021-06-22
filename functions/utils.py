@@ -5,9 +5,9 @@ from torch import nn
 import copy
 import os
 
-from .dataset import *
-from .network import *
-from .plots import *
+from dataset import *
+from network import *
+from plots import *
                           
 def run_experiment(depth, iterations, reps=100, width=3, cov_scale=1):
     """

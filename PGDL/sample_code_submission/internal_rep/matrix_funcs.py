@@ -192,7 +192,7 @@ def compute_complexity(L, k=5, from_evalues=False, from_gram=False):
     complexity_dict['KF-kernel'] = KF_kers
     complexity_dict['Schatten'] = Schattens
 
-    h_star, h_argmin = get_local_rad_bound(evalues, normalize=True, from_evalues=True)
+    h_star, h_argmin = get_local_rad_bound(evalues, from_evalues=True)
     complexity_dict['h*'] = h_star
     complexity_dict['h_argmin'] = h_argmin
 
