@@ -1,0 +1,31 @@
+Metadata-Version: 2.1
+Name: double-descent
+Version: 0.0.1
+Summary: A package for doing the double descent experiment in RF and DN.
+Home-page: https://github.com/neurodata/double_descent.git
+Author: Kaleab A Kinfu
+Author-email: kinfu@jhu.edu
+Maintainer: Kaleab A Kinfu
+Maintainer-email: kinfu@jhu.edu
+License: MIT
+Description: # Double Descent Experiments 
+        
+        Install from Github
+        -------------------
+        You can manually download ``double_descent`` by cloning the git repo master version and
+        running the ``setup.py`` file. That is, unzip the compressed package folder
+        and run the following from the top-level source directory using the terminal::
+        
+            $ git clone https://github.com/neurodata/double_descent.git
+            $ cd double_descent
+            $ python3 setup.py install
+        
+Platform: UNKNOWN
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Mathematics
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.6
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Description-Content-Type: text/markdown

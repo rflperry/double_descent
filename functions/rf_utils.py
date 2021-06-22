@@ -17,6 +17,10 @@ from utils import ece, generate_gaussian_parity
 import argparse
 
 
+import sys; sys.path.append('../PGDL/sample_code_submission/')
+from internal_rep.matrix_funcs import evalues_from_regions
+
+
 def generate_gaussian_parity(n, cov_scale=1, angle_params=None, k=1, acorn=None):
 #     means = [[-1.5, -1.5], [1.5, 1.5], [1.5, -1.5], [-1.5, 1.5]]
     means = [[-1, -1], [1, 1], [1, -1], [-1, 1]]
@@ -42,9 +46,9 @@ def generate_gaussian_parity(n, cov_scale=1, angle_params=None, k=1, acorn=None)
 
 def get_tree(method='rf', max_depth=1, n_estimators=1, max_leaf_nodes = None ):
     if method == 'gb':
-        rf = GradientBoostingClassifier(max_depth=max_depth, n_estimators=n_estimators, random_state=1514, max_leaf_nodes=max_leaf_nodes, learning_rate=1, criterion='mse')
+        rf = GradientBoostingClassifier(max_depth=max_depth, n_estimators=n_estimators, random_state=1514, max_leaf_nodes=max_leaf_nodes, learning_rate=1, criterion='mse', n_jobs=-2)
     else:
-        rf = RandomForestClassifier(bootstrap=False, max_depth=max_depth, n_estimators=n_estimators, random_state=1514, max_leaf_nodes=max_leaf_nodes)
+        rf = RandomForestClassifier(bootstrap=False, max_depth=max_depth, n_estimators=n_estimators, random_state=1514, max_leaf_nodes=max_leaf_nodes, n_jobs=-2)
     
     return rf
 
@@ -122,6 +126,9 @@ def rf_dd_exp(N=4096, reps=100, max_node=None, n_est=10, exp_alias = "depth"):
     ece_error = [list() for _ in range(reps)]
     nodes = [list() for _ in range(reps)]
     polys = [list() for _ in range(reps)]
+    tree_evalues = [list() for _ in range(reps)]
+    forest_evalues = [list() for _ in range(reps)]
+
     # for depth in tqdm(range(1, max_node + n_est), position=0, leave=True):
     # for rep_i in tqdm(range(reps), position=0, leave=True):
     def one_run(rep_i): 
@@ -148,6 +155,20 @@ def rf_dd_exp(N=4096, reps=100, max_node=None, n_est=10, exp_alias = "depth"):
                 nodes[rep_i].append(sum([estimator.get_n_leaves() for estimator in rf.estimators_]))
             leaf_idxs = rf.apply(X_train)
             polys[rep_i].append(len(np.unique(leaf_idxs)))
+
+            tree_evalues[rep_i].append([
+                evalues_from_regions(leaf_idxs[:, tree]) for tree in range(leaf_idxs.shape[1])
+            ])
+
+            tree_evalues_temp = []
+            forest_gram = np.zeros((N, N))
+            for tree in range(leaf_idxs.shape[1]):
+                tree_evalues_temp.append(evalues_from_regions(leaf_idxs[:, tree]))
+                forest_gram += 1*np.equal.outer(leaf_idxs[:, tree], leaf_idxs[:, tree])
+            forest_gram /= leaf_idxs.shape[1]
+            tree_evalues[rep_i].append(tree_evalues_temp)
+            forest_evalues[rep_i].append(np.linalg.svd(forest_gram, compute_uv=False, hermitian=True))
+
             gini_score_train[rep_i].append(gini_impurity_mean(rf, X_train, y_train))
             gini_score_test[rep_i].append(gini_impurity_mean(rf, X_test, y_test))
             train_error[rep_i].append(1 - rf.score(X_train, y_train))
@@ -167,11 +188,12 @@ def rf_dd_exp(N=4096, reps=100, max_node=None, n_est=10, exp_alias = "depth"):
         gini_score_test[rep_i] = np.array(gini_score_test[rep_i])
         ece_error[rep_i] = np.array(ece_error[rep_i])
    
-        np.save('results/xor_rf_dd_'+ exp_alias +'_' + str(rep_i)+ ".npy", [nodes[rep_i], polys[rep_i], train_error[rep_i], test_error[rep_i], train_error_log[rep_i], test_error_log[rep_i], gini_score_train[rep_i], gini_score_test[rep_i], ece_error[rep_i]])
-        
+        np.save('../results/xor_rf_dd_'+ exp_alias +'_' + str(rep_i)+ ".npy", [nodes[rep_i], polys[rep_i], train_error[rep_i], test_error[rep_i], train_error_log[rep_i], test_error_log[rep_i], gini_score_train[rep_i], gini_score_test[rep_i], ece_error[rep_i]])
+        np.save('../results/xor_rf_dd_'+ exp_alias +'_' + str(rep_i)+ "_leaf_indices.npy", leaf_indices)
+
     num_cores = multiprocessing.cpu_count()
     
-    Parallel(n_jobs=-1)(delayed(one_run)(i) for i in range(reps))
+    Parallel(n_jobs=1)(delayed(one_run)(i) for i in range(reps))
 
     train_mean_error = np.array(train_error).mean(axis=0)
     test_mean_error = np.array(test_error).mean(axis=0)
