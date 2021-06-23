@@ -2,20 +2,17 @@ import numpy as np
 import scipy
 from scipy import stats
 
-from networkx.algorithms import bipartite
+# from networkx.algorithms import bipartite
 import scipy.linalg as la
 from numpy.linalg import matrix_rank, norm
-import community
-from community import community_louvain
+# import community
+# from community import community_louvain
 
 import pandas as pd
 
 import copy
 
-<<<<<<< HEAD
-=======
 
->>>>>>> eda
 def get_matrix_from_poly(model, dataset, poly_m, batch_size=500):
     # L_matrices = {'0/1': [], 'true_label':[], 'est_label':[], 'est_poster':[]}
     L_matrices = []
@@ -28,13 +25,8 @@ def get_matrix_from_poly(model, dataset, poly_m, batch_size=500):
     # for key in L_matrices:
     L_mat = np.zeros((len(poly_m), n_poly))
     for idx, poly_i in enumerate(poly_m):
-<<<<<<< HEAD
-        poly_idx = np.where(unique_poly==poly_i)
-        L_mat[idx, poly_idx] = 1#pred_y[idx]+1
-=======
         poly_idx = np.where(unique_poly == poly_i)
         L_mat[idx, poly_idx] = 1  # pred_y[idx]+1
->>>>>>> eda
             # if key == '0/1':
             #     L_mat[idx, poly_idx] = pred_label[idx]
             # elif key == 'true_label':
@@ -47,29 +39,14 @@ def get_matrix_from_poly(model, dataset, poly_m, batch_size=500):
 
     # gen_gap = abs((1-test_acc) - (1-train_acc))
     # test_gen_err = (1-test_acc)
-<<<<<<< HEAD
-    return np.array(L_mat) #, test_gen_err
-=======
     return np.array(L_mat)  # , test_gen_err
 
->>>>>>> eda
 
 def get_label_pred(model, dataset, batch_size=500):
-
-<<<<<<< HEAD
-def get_label_pred(model, dataset, batch_size=500):
-
-    
-    # model.compile(optimizer='adam',
-		# 	loss='sparse_categorical_crossentropy',
-		# 	metrics=['accuracy'])
-            
-=======
     # model.compile(optimizer='adam',
 		# 	loss='sparse_categorical_crossentropy',
 		# 	metrics=['accuracy'])
 
->>>>>>> eda
     acc, size = 0, 0
     test_y = []
 
@@ -88,11 +65,7 @@ def get_label_pred(model, dataset, batch_size=500):
     pred_y = np.argmax(preds, axis=-1)
     # print(pred_y.shape)
 
-<<<<<<< HEAD
-    return pred_y #test_y, pred_y, acc
-=======
     return pred_y  # test_y, pred_y, acc
->>>>>>> eda
 
 ##********** Matrix ranks *************##
 
@@ -244,7 +217,6 @@ def compute_complexity(L, k=5, from_evalues=False, from_gram=False):
     complexity_dict['h_argmin'] = h_argmin
 
     return complexity_dict
->>>>>>> eda
 
 
 def compute_tau(gen_gap, metric, inverse=False):
@@ -293,17 +265,11 @@ def get_df_tau(complexity_dict, gen_err):
         'inverse': inverses
     })
 
-<<<<<<< HEAD
-  return kendal_cor
-
-
-  ###- ----------- New 
-=======
     return kendal_cor
 
 
 # - ----------- New 
->>>>>>> eda
+
 def compute_rad_gen_gap(m, normalize=False):
     '''
     Compute complexity measures of local rad bound for different model architecture, and generalization gap 
@@ -317,32 +283,6 @@ def compute_rad_gen_gap(m, normalize=False):
     avg_proximity = random_partition_kernel(listOfMatrices)
     r, h = get_local_rad_bound(avg_proximity, normalize)
     return r, h
-
-<<<<<<< HEAD
-def random_partition_kernel(listOfMs):
-  '''
-  Compute the random partition kernel (aka characteristic kernel)
-  Input:  list of internal matrices from same model architecture but different trials
-  Output: average proximity matrix  I_{phi(x_i)=phi(x_j)} := m @ m.T , where phi is the activated region (part) assigned to x, average over trials
-  '''
-  listOfInds = [m @ m.T for m in listOfMs]
-  return np.mean(np.array(listOfInds),axis=0)
-  
-def get_local_rad_bound(m, normalize=True):
-  '''
-  Compute local rad bound from Bartlett using avg proximity matrix (i.e. characteristic kernel of NN)
-  Input: m - 2d matrix (n by n)
-  [Bug: normalize should be applied with a hyper-parameter (constant), as the functions are not strictly contained in the unit-ball]
-  Return: r^*, h
-  '''
-  n = m.shape[0]
-  evalues = np.linalg.svd(m, full_matrices=False, compute_uv=False, hermitian=True)
-  if normalize:
-    evalues = evalues / n
-  num_nonzero = np.count_nonzero(evalues)
-  rs = [h/n + np.sqrt((1/n) * evalues[h:].sum()) for h in range(0,num_nonzero+1)]
-  return np.array(rs).min(), np.array(rs).argmin()
-=======
 
 def random_partition_kernel(listOfMs):
     '''
@@ -422,4 +362,3 @@ def get_local_rad_bound(L, normalize=True, from_evalues=False, from_gram=False):
     rs = [h/n + np.sqrt((1/n) * evalues[h:].sum()) for h in range(0,num_nonzero+1)]
 
     return np.array(rs).min(), np.array(rs).argmin()
->>>>>>> eda
