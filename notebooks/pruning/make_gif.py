@@ -4,7 +4,7 @@ from PIL import Image
 
 # filepaths
 
-name = "spiral_layers=2_hyperplanes"#heatmap"#
+name = "spiral_layers=2_heatmap"#
 fp_in = f"./results/{name}*.png"
 fp_out = f"./reports/{name}.gif"
 
