@@ -13,9 +13,9 @@ filepaths = glob.glob(fp_in)
 # print(fp_in[:fp_in.index("*")] + r"([0-9]+)*.png")
 sorted_filepaths = sorted(
     filepaths, key = lambda s: int(re.match(fp_in[:fp_in.index("*")] + r".*?([0-9]+)\.png", s).group(1))
-)#[::-1]
+)[:100]#[::-1]
 
 # https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html#gif
 img, *imgs = [Image.open(f) for f in sorted_filepaths]
 img.save(fp=fp_out, format='GIF', append_images=imgs,
-         save_all=True, duration=200, loop=0)
+         save_all=True, duration=120, loop=0)
