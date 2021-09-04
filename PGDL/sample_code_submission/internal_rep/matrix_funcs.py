@@ -178,8 +178,8 @@ def compute_complexity(L, k=5, from_evalues=False, from_gram=False):
     plot_dict['KF-kernel'].append(KF_kers)
     plot_dict['Schatten'].append(Schattens)
 
-    h, r = compute_rad_gen_gap(rep, normalize=True)
-    plot_dict['h*'].append(h)
+    # h, r = compute_rad_gen_gap(rep, normalize=True)
+    # plot_dict['h*'].append(h)
   
     return plot_dict
 =======
