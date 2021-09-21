@@ -5,9 +5,9 @@ from torch import nn
 import copy
 import os
 
-from dataset import *
-from network import *
-from plots import *
+from .dataset import *
+from .network import *
+from .plots import *
                           
 def run_experiment(depth, iterations, reps=100, width=3, cov_scale=1):
     """
@@ -332,6 +332,27 @@ def binary_pattern_mat(model, train_x):
         binary_str.append( ''.join(str(x) for x in pattern) )
 
     return np.array(binary_str)
+
+
+def get_activation_mat(model, train_x, return_penult=False):
+    last_activations = train_x.cpu().numpy()
+    layers = [module for module in model.modules() if type(module) == torch.nn.Linear]
+    activations = []
+    for layer_id, layer in enumerate(layers):
+        weights, bias = layer.weight.data.detach().cpu().numpy(), layer.bias.data.detach().cpu().numpy()
+        preactivation = np.matmul(last_activations, weights.T) + bias
+        binary_preactivation = (preactivation > 0).astype('int')
+        activations.append(binary_preactivation)
+        if layer_id == len(layers) - 2:
+            break
+        last_activations = preactivation * binary_preactivation
+    
+    activations = np.hstack(activations)
+    if return_penult:
+        return activations, np.asarray(last_activations)
+    else:
+        return activations
+
 
 """
   Example to run the `Increasing Depth` vs `Increasing Width` experiments
