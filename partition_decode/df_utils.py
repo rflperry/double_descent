@@ -9,7 +9,7 @@ from .metrics import compute_true_posterior
 import os
 
 
-def run_df_experiments(
+def run_df_experiment(
     train_n_samples=4096,
     test_n_samples=1000,
     n_reps=100,
@@ -158,6 +158,69 @@ def read_df_results(n_reps, exp_alias="depth"):
     result.hellinger_dist_list = np.array(hellinger_dist)  # .mean(axis=0)
 
     return result
+
+
+"""
+Eigenvalues utilities
+"""
+
+
+def get_tree_irm(tree, X):
+    n = X.shape[0]
+    leaf_indices = tree.apply(X)
+    irm = np.zeros((n, len(set(leaf_indices))))
+    irm[np.arange(n), np.unique(leaf_indices, return_inverse=True)[1]] = 1
+    
+    return irm
+
+
+def get_forest_irm(forest, X):
+    tree_irms = [get_tree_irm(tree, X) for tree in forest.estimators_]
+    return np.hstack(tree_irms)
+
+
+def get_tree_evals(model, X):
+    """
+    Returns the eigenvalues of the tree's internal representation,
+    the leaf similarity matrix. The eigenvalues are the sizes
+    of each of the leaves.
+
+    Returns
+    -------
+    irm : internal representation eigenvalues
+    """
+    leaf_indices = model.apply(X)
+    _,  evals = np.unique(leaf_indices, return_counts=True)
+    return evals
+
+
+def get_forest_evals(model, X):
+    """
+    Returns the eigenvalues of the forests's internal representation,
+    the average of all its tree's representations, as well as its
+    activation matrix.
+
+    Returns
+    -------
+    irm_evals : internal representation eigenvalues
+    act_evals : activation matrix eigenvalues
+    """
+    n = X.shape[0]
+    irm = np.zeros((n, n))
+    for tree in model.estimators_:
+        leaf_indices = tree.apply(X)
+        Z = np.zeros((n, len(set(leaf_indices))))
+        Z[np.arange(n), np.unique(leaf_indices, return_inverse=True)[1]] = 1
+        irm += Z @ Z.T
+    irm /= len(model.estimators_)
+    irm_evals = np.linalg.svd(irm, compute_uv=False, hermitian=True)
+    irm_evals[np.abs(irm_evals) < 1e-10] = 0
+
+    act_mat = (irm == 1.0).astype(int)
+    act_evals = np.linalg.svd(act_mat, compute_uv=False, hermitian=True)
+    act_evals[np.abs(act_evals) < 1e-10] = 0
+
+    return irm_evals, act_evals
 
 
 """

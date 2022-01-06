@@ -1,10 +1,10 @@
 from .dn_utils import (
-    run_dn_experiments,
+    run_dn_experiment,
     get_polytopes,
     read_dn_results,
     run_internal_rep_experiment,
 )
-from .df_utils import run_df_experiments, read_df_results
+from .df_utils import run_df_experiment, read_df_results
 from .plots import plot_dn_results, plot_df_results
 from .dataset import get_dataset
 from .metrics import (
