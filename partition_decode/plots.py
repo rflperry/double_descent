@@ -447,3 +447,59 @@ def plot_df_results(results, titles=None, save=True):
         plt.savefig("../results/DecisionForest.pdf", bbox_inches="tight")
     else:
         return plt
+
+
+def continuous_pairplot(df, hue, vars=None, cmap="coolwarm", diag_kind="auto", scale=None):
+    """
+    Wraps the seaborn pairplot to allow for a continuous colorcode
+
+    Parameters
+    ----------
+    df : dataframe
+
+    hue : str
+        Variable to color the plot by
+
+    vars :
+
+    cmap : str (default='coolwarm')
+        Matplotlib colormap to use
+
+    diag_kind : str, (default='auto')
+        See seaborn.pairplot for details
+
+    scale : str (default=None)
+        Matplotlib scale option for axes
+
+    Returns
+    -------
+    seaborn.PairGrid object
+    """
+    import matplotlib as mpl
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+    vmin = min(np.min([df[hue]]), -1e-6)
+    vmax = max(np.max([df[hue]]), 1e-6)
+    g = sns.pairplot(
+        df,
+        vars=vars,
+        diag_kind=diag_kind,
+        plot_kws=dict(
+            # The effort I put into figuring this out.....
+            c=df[hue],
+            cmap=cmap,
+            norm=mpl.colors.TwoSlopeNorm(vcenter=0, vmin=vmin, vmax=vmax),
+        ),
+    )
+    if scale:
+        for r in range(len(g.axes)):
+            for c in range(len(g.axes)):
+                g.axes[r, c].set_xscale(scale)
+                if r != c:
+                    g.axes[c, r].set_yscale(scale)
+
+    sm = mpl.cm.ScalarMappable(
+        mpl.colors.TwoSlopeNorm(vcenter=0, vmin=vmin, vmax=vmax), cmap=cmap
+    )
+    plt.colorbar(sm, ax=g.axes, label=hue, aspect=40)
+    return g
