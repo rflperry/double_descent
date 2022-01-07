@@ -12,6 +12,8 @@ from tqdm import tqdm
 
 from partition_decode.dataset import generate_gaussian_parity
 from partition_decode.df_utils import get_tree_evals, get_forest_evals
+from partition_decode.models import ReluNetClassifier
+from partition_decode.dn_utils import irm2activations
 
 
 """
@@ -30,12 +32,31 @@ TREE_PARAMS = {
 
 FOREST_PARAMS = {
     "n_estimators": [1, 2, 3, 4, 5, 10, 20],
+    # "max_features": [1],
+    # "splitter": ['random'],
     "bootstrap": [False],
     "max_depth": [2, 3, 4, 6, 8, 10, 15, 20, None],
     "n_jobs": [-1],
 }
 
-NETWORK_PARAMETERS = {"temp": [None]}
+NETWORK_PARAMS = {
+    'hidden_layer_dims': [
+        [100],
+        [100, 100],
+        [100, 100, 100],
+    ],
+    'num_epochs': [100],
+    'learning_rate': [0.01],
+    'batch_size': [128],
+    'verbose': [1],
+    'learning_rate': [0.01]
+}
+
+MODEL_METRICS = {
+    'tree': ['n_leaves'],
+    'forest': ['n_total_leaves'],
+    'network': ['n_parameters', 'depth', 'width'],
+}
 
 """
 Experiment run functions
@@ -55,38 +76,66 @@ def run_tree(X_train, y_train, X_test, model_params):
     y_train_pred = tree.predict(X_train)
     y_test_pred = tree.predict(X_test)
     irm_evals = get_tree_evals(tree, X_train)
-    extra_outputs = {"n_total_leaves": tree.get_n_leaves()}
+    model_metrics = [tree.get_n_leaves()]
     # same as activation evals
 
-    return y_train_pred, y_test_pred, irm_evals, irm_evals, extra_outputs
-
-
-run_tree.extra_headers = ["n_total_leaves"]
+    return y_train_pred, y_test_pred, irm_evals, irm_evals, model_metrics
 
 
 def run_forest(X_train, y_train, X_test, model_params):
-    model = RandomForestClassifier(**model_params)
+    model_params = model_params.copy()
+    if "splitter" in model_params.keys():
+        splitter = model_params['splitter']
+        model_params.pop('splitter')
+        model = RandomForestClassifier(**model_params)
+        model.base_estimator.splitter = splitter
+    else:
+        model = RandomForestClassifier(**model_params)
     model.fit(X_train, y_train)
     y_train_pred = model.predict(X_train)
     y_test_pred = model.predict(X_test)
+    
     irm_evals, act_evals = get_forest_evals(model, X_train)
-    extra_outputs = {
-        "n_total_leaves": np.sum([tree.get_n_leaves() for tree in model.estimators_])
-    }
+    model_metrics = [np.sum([tree.get_n_leaves() for tree in model.estimators_])]
 
-    return y_train_pred, y_test_pred, irm_evals, act_evals, extra_outputs
-
-
-run_forest.extra_headers = ["n_total_leaves"]
+    return y_train_pred, y_test_pred, irm_evals, act_evals, model_metrics
 
 
 def run_network(X_train, y_train, X_test, model_params):
-    return
+    model = ReluNetClassifier(**model_params)
+
+    model.fit(X_train, y_train)
+    y_train_pred = model.predict(X_train)
+    y_test_pred = model.predict(X_test)
+
+    irm = model.get_internal_representation(X_train)
+    irm_evals = np.linalg.svd(irm, compute_uv=False)
+
+    act_mat = irm2activations(irm)
+    del irm
+    act_evals = np.linalg.svd(act_mat, compute_uv=False)
+    del act_mat
+
+    model_metrics = [
+        model.n_parameters_, len(model.hidden_layer_dims),
+        model.hidden_layer_dims[0]]
+
+    return y_train_pred, y_test_pred, irm_evals, act_evals, model_metrics
 
 
 """
 Experiment result metrics
 """
+
+
+def clean_results(results):
+    results = list(results)
+    cleaned = []
+    for result in results:
+        if type(result) == list:
+            result = ';'.join(map(str, result))
+        cleaned.append(result)
+    return cleaned
 
 
 def get_y_metrics(y_true, y_pred):
@@ -135,7 +184,7 @@ def main(args):
             "activated_regions",
             "regions_l2",
         ]
-        + run_model.extra_headers
+        + MODEL_METRICS[args.model]
     )
     f = open(
         Path(args.output_dir) / f"xor_{args.model}_results.csv",
@@ -161,7 +210,7 @@ def main(args):
 
             for model_params in model_params_grid:
                 # Train and test model
-                y_train_pred, y_test_pred, irm_evals, act_evals, extras = run_model(
+                y_train_pred, y_test_pred, irm_evals, act_evals, model_metrics = run_model(
                     X_train, y_train, X_test, model_params
                 )
 
@@ -169,11 +218,11 @@ def main(args):
                 results = (
                     [args.model, rep]
                     + list(data_params.values())
-                    + list(model_params.values())
+                    + clean_results(model_params.values())
                     + get_y_metrics(y_train, y_train_pred)  # Train
                     + get_y_metrics(y_test, y_test_pred)  # Test
                     + get_eigenval_metrics(irm_evals, act_evals)
-                    + list(extras.values())
+                    + model_metrics
                 )
 
                 # Dynamically write results

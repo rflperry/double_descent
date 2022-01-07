@@ -1,0 +1,4 @@
+model,rep,n_train_samples,hidden_layer_dims,num_epochs,learning_rate,batch_size,verbose,train_01_error,test_01_error,irm_l2,activated_regions,regions_l2,n_parameters,depth,width
+network,0,4096,100,100,0.01,128,1,0.579345703125,0.569,282.8975079423642,534,64.0,502,1,100
+network,0,4096,100;100,100,0.01,128,1,0.601806640625,0.5663,155.10641508332273,212,64.0,10602,2,100
+network,0,4096,100;100;100,100,0.01,128,1,0.65869140625,0.6097,100.06997551713502,94,64.0,20702,3,100
