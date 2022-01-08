@@ -51,6 +51,10 @@ scoring_version = 1.0
 # Names for filtering
 filter_filenames = [".DS_Store", "__MACOSX"]
 
+# Metric
+matrix = 'penult_act' # 'penult_act'
+lp_metric = 0
+
 
 def name_filter(name):
     for fn in filter_filenames:
@@ -69,6 +73,14 @@ def get_metric():
         metric_name = f.readline().strip()
     scoring_function = getattr(my_metric, metric_name)
     return metric_name, scoring_function
+
+
+def get_eval_complexity(evals, n_samples=1):
+    if lp_metric == 0:
+        metric = np.sum(evals > 0)
+    else:
+        metric = np.sum(evals ** lp_metric) ** (1/lp_metric)
+    return metric / n_samples
 
 
 def check_data_validity(model_specs):
@@ -159,8 +171,8 @@ if __name__ == "__main__":
     print("score_dir: ", score_dir, "\n")
     # Create the output directory, if it does not already exist and open output files
     mkdir(score_dir)
-    score_file = open(os.path.join(score_dir, "scores.txt"), "w")
-    html_file = open(os.path.join(score_dir, "scores.html"), "w")
+    score_file = open(os.path.join(score_dir, f"{matrix}_l{lp_metric}_scores.txt"), "w")
+    html_file = open(os.path.join(score_dir, f"{matrix}_l{lp_metric}_scores.html"), "w")
 
     # Get the metric
     metric_name, scoring_function = get_metric()
@@ -189,7 +201,13 @@ if __name__ == "__main__":
             # Reformat predictions, if containing eigenvalues
             for key, val in prediction.items():
                 if isinstance(val, dict):
-                    prediction[key] = val["complexity"]
+                    evals = np.asarray(val[f'{matrix}_evals'].split(',')).astype('float')
+                    try:
+                        n_samples = val['n_samples']
+                    except:
+                        n_samples = 1
+                    metric = get_eval_complexity(evals, n_samples)
+                    prediction[key] = metric
 
             print("Read prediction from: {}".format(predict_file))
 

@@ -14,7 +14,7 @@ from tensorflow.keras import backend as K
 # from .matrix_funcs import get_matrix_from_poly, compute_complexity
 
 
-def complexity(model, dataset, program_dir, mid=None, measure="frac_act_regions"):
+def complexity(model, dataset, program_dir, mid=None, measure="penult_irm"):
     """
     Wrapper Complexity Function to combine various complexity measures
 
@@ -36,10 +36,29 @@ def complexity(model, dataset, program_dir, mid=None, measure="frac_act_regions"
     """
 
     ########## INTERNAL REPRESENTATION #################
-    if measure == 'frac_act_regions':
+    if measure == 'penult_act':
         codes, n_samples = penultimate_activations(model, dataset, batch_size=128)
-        unique_codes, act_mat_evals = np.unique(codes, return_counts=True)
+        unique_codes, evals = np.unique(codes.flatten(), return_counts=True, axis=0)
         complexityScore = len(unique_codes) / n_samples
+        extras = {
+            'penult_act_evals': ','.join(map(str, vals)),
+            'n_samples': n_samples,
+        }
+    elif measure == 'penult_irm':
+        mat, n_samples = penultimate_activations(model, dataset, batch_size=128, irm=True)
+        _, act_evals = np.unique(mat, return_counts=True, axis=0)
+        mat = mat.T @ mat
+        irm_evals = np.sqrt(np.linalg.svd(mat , compute_uv=False, hermitian=True))
+        irm_evals = irm_evals[irm_evals > 1e-12]
+        irm_evals /= n_samples
+        
+        complexityScore = np.sum(act_evals) / n_samples # fraction of activated regions
+
+        extras = {
+            'penult_act_evals': ','.join(map(str, act_evals)),
+            'penult_irm_evals': ','.join(map(str, irm_evals)),
+            'n_samples': n_samples,
+        }
     # if measure == 'Schatten':
     # complexityScore = complexityIR(
     #     model, dataset, mid=None, program_dir=program_dir, method=measure
@@ -48,7 +67,7 @@ def complexity(model, dataset, program_dir, mid=None, measure="frac_act_regions"
     # complexityScore = complexityIR(model, dataset, program_dir=program_dir)
 
     print("-------Final Scores---------", complexityScore)
-    return complexityScore, {'act_mat_evals': ','.join(map(str, act_mat_evals))}
+    return complexityScore, extras
 
 
 def complexityIR(model, dataset, method, mid=None, program_dir=None):
@@ -192,7 +211,7 @@ def polytope_activations(model, dataset, batch_size, pool_layers=True):
     return np.array(polytope_memberships[0])
 
 
-def penultimate_activations(model, dataset, batch_size=500):
+def penultimate_activations(model, dataset, batch_size=500, irm=False):
     # penultimate layer model
     penultimate_layer = K.function([model.layers[0].input], [model.layers[-2].output])
     relu_string_codes = []
@@ -201,11 +220,12 @@ def penultimate_activations(model, dataset, batch_size=500):
     # Create unique binary -> base10 codes for each batch
     for x, _ in dataset.batch(batch_size):
         penult_acts = (penultimate_layer(x)[0] > 0).reshape(len(x), -1)
-        relu_string_codes.append(
-            np.sum(2**penult_acts, axis=1)
-        )
+        if irm:
+            relu_string_codes.append(penult_acts)
+        else:
+            relu_string_codes.append(
+                np.sum(2**penult_acts, axis=1).reshape(-1, 1)
+            )
         n_samples += len(x)
-        # if n_samples >= 128:
-        #     break
 
-    return np.concatenate(relu_string_codes), n_samples
+    return np.vstack(relu_string_codes), n_samples
