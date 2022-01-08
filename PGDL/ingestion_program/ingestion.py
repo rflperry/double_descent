@@ -72,6 +72,9 @@ default_input_dir = root_dir + "sample_data"
 default_output_dir = root_dir + "sample_result_submission"
 default_program_dir = root_dir + "ingestion_program"
 default_submission_dir = root_dir + "sample_code_submission"
+default_dataset = None # run all
+
+# Private leaderboard data run 
 
 # =============================================================================
 # =========================== END USER OPTIONS ================================
@@ -89,6 +92,7 @@ from sys import argv, path
 import datetime
 import glob
 import inspect
+from tqdm import tqdm
 
 the_date = datetime.datetime.now().strftime("%y-%m-%d-%H-%M")
 
@@ -113,11 +117,18 @@ if __name__ == "__main__" and debug_mode < 4:
         output_dir = default_output_dir
         program_dir = default_program_dir
         submission_dir = default_submission_dir
+        dataset = default_dataset
     else:
         input_dir = os.path.abspath(argv[1])
         output_dir = os.path.abspath(argv[2])
         program_dir = os.path.abspath(argv[3])
         submission_dir = os.path.abspath(argv[4])
+        try:
+            dataset = argv[5]
+            print("Using dataset: " + str(dataset))
+        except:
+            dataset = None
+            print("Using all datasets")
     if verbose:
         print("Using input_dir: " + input_dir)
         print("Using output_dir: " + output_dir)
@@ -178,7 +189,8 @@ if __name__ == "__main__" and debug_mode < 4:
     time_left_over = 0
     time_exceeded = False
     for basename in datanames:  # Loop over datasets
-        if basename in filter_filenames:
+        if basename in filter_filenames or (
+            dataset is not None and dataset != basename):
             continue
         vprint(
             verbose,
@@ -235,7 +247,7 @@ if __name__ == "__main__" and debug_mode < 4:
 
         complexity_value = {}
         # gen_err_value = {}
-        for mid in D.model_ids:
+        for mid in tqdm(D.model_ids):
             if time_exceeded:
                 complexity_value[mid] = "EXCEEDED"
                 continue
@@ -249,18 +261,27 @@ if __name__ == "__main__" and debug_mode < 4:
             else:
                 measure_val = complexity(model, training_data)
 
-            try:
-                measure_val = float(measure_val)
-            except:
-                print("Incorrect measure data type!")
-                raise TypeError(
-                    "Measure should be a scalar float or numpy float but got type: {}".format(
-                        type(measure_val)
+            if isinstance(measure_val, tuple):
+                measure_val, extras_dict = measure_val
+            else:
+                extras_dict = None
+                try:
+                    measure_val = float(measure_val)
+                except:
+                    print("Incorrect measure data type!")
+                    raise TypeError(
+                        "Measure should be a scalar float or numpy float but got type: {}".format(
+                            type(measure_val)
+                        )
                     )
-                )
 
             # gen_err_value[mid] = gen_err
-            complexity_value[mid] = measure_val
+
+            if extras_dict is not None:
+                extras_dict['complexity'] = measure_val
+                complexity_value[mid] = extras_dict
+            else:
+                complexity_value[mid] = measure_val
             time_left_over = time_budget - time.time() + start
             if time_left_over <= 0:
                 time_exceeded = True
@@ -323,4 +344,4 @@ if __name__ == "__main__" and debug_mode < 4:
                 max_time_per_model, time_budget
             )
         )
-    # raise TimeoutError("Exceeding the time budge of {} sec/model ({} seconds total).".format(max_time_per_model, time_budget))
+        raise TimeoutError("Exceeding the time budge of {} sec/model ({} seconds total).".format(max_time_per_model, time_budget))

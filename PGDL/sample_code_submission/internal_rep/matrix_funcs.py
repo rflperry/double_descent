@@ -2,11 +2,8 @@ import numpy as np
 import scipy
 from scipy import stats
 
-from networkx.algorithms import bipartite
 import scipy.linalg as la
 from numpy.linalg import matrix_rank, norm
-import community
-from community import community_louvain
 
 import pandas as pd
 
@@ -115,11 +112,14 @@ def graph_metrics(m):
     - modularity: relative density of edges inside communities with respect to edges outside communities.
     ref: https://python-louvain.readthedocs.io/en/latest/api.html#community.modularity
     """
+    from community import modularity
+    from community import community_louvain
+    from networkx.algorithms import bipartite
     sM = scipy.sparse.csr_matrix(m)
     G = bipartite.matrix.from_biadjacency_matrix(sM)
     avg_c = bipartite.average_clustering(G, mode="dot")
     partition = community_louvain.best_partition(G)
-    modularity = community.modularity(partition, G)
+    modularity = modularity(partition, G)
 
     return avg_c, modularity
 

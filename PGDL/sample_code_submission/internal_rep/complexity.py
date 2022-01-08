@@ -9,12 +9,12 @@ from scipy.stats import *
 
 from tensorflow.keras import backend as K
 
-from keras.utils import multi_gpu_model
+# from keras.utils import multi_gpu_model
 
-from .matrix_funcs import get_matrix_from_poly, compute_complexity
+# from .matrix_funcs import get_matrix_from_poly, compute_complexity
 
 
-def complexity(model, dataset, program_dir, mid=None, measure="KF-kernel"):
+def complexity(model, dataset, program_dir, mid=None, measure="frac_act_regions"):
     """
     Wrapper Complexity Function to combine various complexity measures
 
@@ -36,15 +36,19 @@ def complexity(model, dataset, program_dir, mid=None, measure="KF-kernel"):
     """
 
     ########## INTERNAL REPRESENTATION #################
+    if measure == 'frac_act_regions':
+        codes, n_samples = penultimate_activations(model, dataset, batch_size=128)
+        unique_codes, act_mat_evals = np.unique(codes, return_counts=True)
+        complexityScore = len(unique_codes) / n_samples
     # if measure == 'Schatten':
-    complexityScore = complexityIR(
-        model, dataset, mid=None, program_dir=program_dir, method=measure
-    )
+    # complexityScore = complexityIR(
+    #     model, dataset, mid=None, program_dir=program_dir, method=measure
+    # )
     # else:
     # complexityScore = complexityIR(model, dataset, program_dir=program_dir)
 
     print("-------Final Scores---------", complexityScore)
-    return complexityScore
+    return complexityScore, {'act_mat_evals': ','.join(map(str, act_mat_evals))}
 
 
 def complexityIR(model, dataset, method, mid=None, program_dir=None):
@@ -68,7 +72,7 @@ def complexityIR(model, dataset, method, mid=None, program_dir=None):
     """
 
     layers = []
-    batch_size = 500
+    batch_size = 128
     # poly_m = get_polytope(model, dataset, batch_size=batch_size)
     poly_m = penultimate_activations(model, dataset, batch_size=batch_size)
     # poly_m = polytope_activations(model, dataset, batch_size=batch_size)
@@ -190,18 +194,18 @@ def polytope_activations(model, dataset, batch_size, pool_layers=True):
 
 def penultimate_activations(model, dataset, batch_size=500):
     # penultimate layer model
-    penultimate_layer = K.function([model.layers[0].input], [model.layers[-4].output])
-    activations = []
-    binary_str = []
+    penultimate_layer = K.function([model.layers[0].input], [model.layers[-2].output])
+    relu_string_codes = []
+    n_samples = 0
 
-    for x, y in dataset.batch(batch_size):
-        out = np.array(penultimate_layer([x])[0] > 0, dtype=np.int8).reshape(len(x), -1)
-        activations.append(out)
-    polytope_memberships = [
-        np.tensordot(
-            np.concatenate(activations, axis=0),
-            2 ** np.arange(0, np.shape(np.concatenate(activations, axis=0))[1]),
-            axes=1,
+    # Create unique binary -> base10 codes for each batch
+    for x, _ in dataset.batch(batch_size):
+        penult_acts = (penultimate_layer(x)[0] > 0).reshape(len(x), -1)
+        relu_string_codes.append(
+            np.sum(2**penult_acts, axis=1)
         )
-    ]
-    return np.array(polytope_memberships[0])
+        n_samples += len(x)
+        # if n_samples >= 128:
+        #     break
+
+    return np.concatenate(relu_string_codes), n_samples

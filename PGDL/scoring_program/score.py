@@ -185,6 +185,12 @@ if __name__ == "__main__":
             predict_file = os.path.join(prediction_dir, basename + ".predict")
             with open(predict_file, "r") as f:
                 prediction = json.load(f)
+
+            # Reformat predictions, if containing eigenvalues
+            for key, val in prediction.items():
+                if isinstance(val, dict):
+                    prediction[key] = val["complexity"]
+
             print("Read prediction from: {}".format(predict_file))
 
             for mid in prediction:
