@@ -21,7 +21,7 @@ import multiprocessing
 from datetime import datetime
 
 
-def run_dn_experiment(
+def train_test_dn(
     n_iterations,
     train_data,
     test_data,
@@ -113,7 +113,7 @@ def run_dn_experiment(
             )
 
             rf_posteriors_grid = model(
-                torch.FloatTensor(np.c_[grid_xx.ravel(), grid_yy.ravel()]).cuda()
+                torch.FloatTensor(np.c_[grid_xx.ravel(), grid_yy.ravel()])#.cuda()
             )
             class_1_posteriors = (
                 torch.sigmoid(rf_posteriors_grid).detach().cpu().numpy()
@@ -201,7 +201,7 @@ def run_dn_experiment(
     ]
 
 
-def run_dn_experiments(
+def run_dn_experiment(
     n_iterations,
     increase_depth=False,
     increase_width=False,
@@ -272,7 +272,7 @@ def run_dn_experiments(
     # test_y[test_y_tmp==0] = 1
     # test_y[test_y_tmp==1] = 0
     def one_run(rep_i):
-        result = run_dn_experiment(
+        result = train_test_dn(
             n_iterations,
             (train_x, train_y),
             (test_x, test_y),

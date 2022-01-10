@@ -84,9 +84,11 @@ def run_df_experiment(
             exp_name=exp_alias,
         )
 
-    n_cores = multiprocessing.cpu_count()
-
-    Parallel(n_jobs=-1)(delayed(one_run)(i) for i in range(n_reps))
+    # n_cores = multiprocessing.cpu_count()
+    # Parallel(n_jobs=-1)(delayed(one_run)(i) for i in range(n_reps))
+    # Forests are already parallelized
+    for i in range(n_reps):
+        one_run(i)
 
     train_mean_error = np.array(train_error).mean(axis=0)
     test_mean_error = np.array(test_error).mean(axis=0)

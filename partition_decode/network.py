@@ -137,7 +137,7 @@ def get_model(
     activation=torch.nn.ReLU(),
     bias=True,
     bn=False,
-    use_gpu=True,
+    use_gpu=False,
 ):
     """
     Initializes the deep neural net model and send to gpu

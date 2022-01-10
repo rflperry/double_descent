@@ -187,12 +187,22 @@ def plot_dn_results(results, titles=None, save=True):
 
     bayes_err = 0.26
 
+    metric_ylab = [
+        "Classification error",
+        # "Cross-Entropy Loss",
+        # "Gini impurity",
+        "Activated regions",
+        # "Hellinger distance",
+    ]
+
     # Figure params
     fontsize = 22
     ticksize = 20
     linewidth = 2
     fig, axes = plt.subplots(
-        figsize=(14, 20), nrows=4, ncols=len(results), sharex="col", sharey="row"
+        figsize=(5*len(results), 5*len(metric_ylab)),
+        nrows=len(metric_ylab), ncols=len(results),
+        sharex="col", sharey="row"
     )
 
     plt.tick_params(labelsize=ticksize)
@@ -211,16 +221,9 @@ def plot_dn_results(results, titles=None, save=True):
         ## You can choose the panels to display
         metric_list = [
             (result.train_err_list, result.test_err_list),
-            (result.train_loss_list, result.test_loss_list),
-            (result.gini_train_list, result.gini_test_list),
+            # (result.train_loss_list, result.test_loss_list),
+            # (result.gini_train_list, result.gini_test_list),
             result.n_polytopes_list,
-        ]
-        metric_ylab = [
-            "Generalization Error",
-            "Cross-Entropy Loss",
-            "Gini impurity",
-            "Activated regions",
-            # "Hellinger distance",
         ]
 
         result.n_pars = np.array(result.n_pars, dtype=float)
@@ -260,6 +263,13 @@ def plot_dn_results(results, titles=None, save=True):
                     np.percentile(metric[1], 75, axis=0),
                     alpha=0.2,
                 )
+
+                if i == len(results) - 1:
+                    ax.legend(
+                        loc='upper right',
+                        fontsize=fontsize - 5,
+                        frameon=False,
+                    )
             else:
                 metric = np.array(metric, dtype=float)
                 ax.plot(result.n_pars, np.median(metric, 0).clip(min=0), linewidth=2)
@@ -270,10 +280,10 @@ def plot_dn_results(results, titles=None, save=True):
                     alpha=0.2,
                 )
 
-            ax.axvline(x=1000, color="gray", alpha=0.6)
-            if j == 0:
-                ax.set_title(titles[i], fontsize=fontsize + 2)
-                ax.axhline(y=bayes_err, color="gray", linestyle="--")
+            # ax.axvline(x=1000, color="gray", alpha=0.6)
+            # if j == 0:
+            #     ax.set_title(titles[i], fontsize=fontsize + 2)
+            #     ax.axhline(y=bayes_err, color="gray", linestyle="--")
 
             if i == 0:
                 ax.set_ylabel(metric_ylab[j], fontsize=fontsize)
@@ -284,19 +294,19 @@ def plot_dn_results(results, titles=None, save=True):
             # ax.locator_params(nbins=6, axis='x')
             ax.tick_params(axis="both", which="major", labelsize=ticksize)
 
-    lines, labels = ax.get_legend_handles_labels()
-    plt.legend(
-        lines,
-        labels,
-        loc="best",
-        bbox_to_anchor=(0.0, -0.009, 1, 1),
-        bbox_transform=plt.gcf().transFigure,
-        fontsize=fontsize - 5,
-        frameon=False,
-    )
+    # lines, labels = ax.get_legend_handles_labels()
+    # plt.legend(
+    #     lines,
+    #     labels,
+    #     loc="best",
+    #     bbox_to_anchor=(0.0, -0.009, 1, 1),
+    #     bbox_transform=plt.gcf().transFigure,
+    #     fontsize=fontsize - 5,
+    #     frameon=False,
+    # )
 
     fig.supxlabel(
-        "Total parameters", fontsize=fontsize, verticalalignment="bottom", y=-0.01
+        "Total number of parameters", fontsize=fontsize, verticalalignment="bottom", y=-0.01
     )
     sns.despine()
     if save:
@@ -337,12 +347,23 @@ def plot_df_results(results, titles=None, save=True):
 
     bayes_err = 0.26
 
+    ## You can choose the panels to display
+    metric_ylab = [
+        "Classification error",
+        # "Cross-Entropy Loss",
+        # "Gini impurity",
+        "Activated regions",
+        # "Hellinger distance",
+    ]
+
     # Figure params
     fontsize = 22
     ticksize = 20
     linewidth = 2
     fig, axes = plt.subplots(
-        figsize=(14, 20), nrows=4, ncols=len(results), sharex="col", sharey="row"
+        figsize=(5*len(results), 5*len(metric_ylab)),
+        nrows=len(metric_ylab), ncols=len(results),
+        sharex="col", sharey="row"
     )
 
     plt.tick_params(labelsize=ticksize)
@@ -354,20 +375,12 @@ def plot_df_results(results, titles=None, save=True):
     for i in range(len(results)):
         result = results[i]
 
-        ## You can choose the panels to display
         metric_list = [
             (result.train_err_list, result.test_err_list),
             # (result.train_loss_list, result.test_loss_list),
-            (result.gini_train_list, result.gini_test_list),
+            # (result.gini_train_list, result.gini_test_list),
             result.n_polytopes_list,
-            result.hellinger_dist_list,
-        ]
-        metric_ylab = [
-            "Generalization Error",
-            # "Cross-Entropy Loss",
-            "Gini impurity",
-            "Activated regions",
-            "Hellinger distance",
+            # result.hellinger_dist_list,
         ]
 
         result.n_nodes = np.array(result.n_nodes, dtype=float)
@@ -405,6 +418,12 @@ def plot_df_results(results, titles=None, save=True):
                     np.percentile(metric[1], 75, axis=0),
                     alpha=0.2,
                 )
+                if i == len(results) - 1:
+                    ax.legend(
+                        loc='upper right',
+                        fontsize=fontsize - 5,
+                        frameon=False,
+                    )
             else:
                 metric = np.array(metric, dtype=float)
                 ax.plot(result.n_nodes, np.median(metric, 0).clip(min=0), linewidth=2)
@@ -415,7 +434,7 @@ def plot_df_results(results, titles=None, save=True):
                     alpha=0.2,
                 )
 
-            ax.axvline(x=1000, color="gray", alpha=0.6)
+            # ax.axvline(x=1000, color="gray", alpha=0.6)
             if j == 0:
                 ax.set_title(titles[i], fontsize=fontsize + 2)
                 # ax.axhline(y=bayes_err, color='gray', linestyle='--')
@@ -429,18 +448,18 @@ def plot_df_results(results, titles=None, save=True):
             # ax.locator_params(nbins=6, axis='x')
             ax.tick_params(axis="both", which="major", labelsize=ticksize)
 
-    lines, labels = ax.get_legend_handles_labels()
-    plt.legend(
-        lines,
-        labels,
-        loc="best",
-        bbox_to_anchor=(0.0, -0.009, 1, 1),
-        bbox_transform=plt.gcf().transFigure,
-        fontsize=fontsize - 5,
-        frameon=False,
-    )
+        # lines, labels = ax.get_legend_handles_labels()
+        # ax.set_legend(
+        #     lines,
+        #     labels,
+        #     loc="best",
+        #     bbox_to_anchor=(0.0, -0.009, 1, 1),
+        #     bbox_transform=plt.gcf().transFigure,
+        #     fontsize=fontsize - 5,
+        #     frameon=False,
+        # )
 
-    fig.supxlabel("Total nodes", fontsize=fontsize, verticalalignment="bottom", y=-0.01)
+    fig.supxlabel("Number of leaf nodes", fontsize=fontsize, verticalalignment="bottom", y=-0.01)
     sns.despine()
     if save:
         os.makedirs("../results", exist_ok=True)
