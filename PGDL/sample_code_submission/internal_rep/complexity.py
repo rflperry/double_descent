@@ -229,3 +229,23 @@ def penultimate_activations(model, dataset, batch_size=500, irm=False):
         n_samples += len(x)
 
     return np.vstack(relu_string_codes), n_samples
+
+
+def full_network_activations(model, dataset, batch_size=500, irm=False):
+    # penultimate layer model
+    penultimate_layer = K.function([model.layers[0].input], [model.layers[-2].output])
+    relu_string_codes = []
+    n_samples = 0
+
+    # Create unique binary -> base10 codes for each batch
+    for x, _ in dataset.batch(batch_size):
+        penult_acts = (penultimate_layer(x)[0] > 0).reshape(len(x), -1)
+        if irm:
+            relu_string_codes.append(penult_acts)
+        else:
+            relu_string_codes.append(
+                np.sum(2**penult_acts, axis=1).reshape(-1, 1)
+            )
+        n_samples += len(x)
+
+    return np.vstack(relu_string_codes), n_samples
