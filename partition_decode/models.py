@@ -20,13 +20,14 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
     def __init__(
         self,
         hidden_layer_dims=[100, 100],
-        num_epochs=100,
+        n_epochs=100,
         learning_rate=0.01,
         batch_size=128,
         shuffle=True,
         callbacks=[],
         use_gpu=False,
         verbose=0,
+        early_stop_thresh=0,
     ):
 
         self.history_ = None
@@ -39,6 +40,7 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         # Sets all attributes from the initialization
         for arg, val in values.items():
             setattr(self, arg, val)
+        self.hidden_layer_dims = list(self.hidden_layer_dims)
 
     def _build_model(self):
         self._layer_dims = [self.input_dim_] + self.hidden_layer_dims + [
@@ -79,7 +81,7 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         self.history_ = {"bce_loss": [], "01_error": []}
 
         finish = False
-        for epoch in range(self.num_epochs):
+        for epoch in range(self.n_epochs):
             if finish:
                 break
 
@@ -103,11 +105,13 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
             ).numpy()
 
             error = zero_one_loss(y_pred_results.argmax(1), y_labels.argmax(1))
+            if error <= self.early_stop_thresh:
+                finish = True
 
             self.history_["01_error"].append(error)
             self.history_["bce_loss"].append(loss.detach().item())
 
-            if self.verbose > 0:
+            if self.verbose > 0 and epoch % 5 == 0:
                 print(
                     "Results for epoch {}, bce_loss={:.2f}, 01_error={:.2f}".format(
                         epoch + 1, loss.detach().item(), error
@@ -160,7 +164,7 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
             x_pred = Variable(torch.from_numpy(batch).float())
             y_pred = self.model_(x_pred.cuda() if self.gpu_ else x_pred)
             y_pred_formatted = torch.nn.functional.softmax(
-                y_pred.cpu().detach() if self.gpu_ else y_pred.detach(), dim=0
+                y_pred.cpu().detach() if self.gpu_ else y_pred.detach(), dim=1
             ).numpy()
             results += [y_pred_formatted]
 
@@ -181,7 +185,7 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         implementation returns negative zero_one_loss.
         """
         y_pred = self.predict(X, y)
-        return zero_one_loss(y, y_pred) * -1
+        return zero_one_loss(y, y_pred)
 
     @property
     def n_parameters_(self):
