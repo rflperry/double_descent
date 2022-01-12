@@ -219,6 +219,20 @@ def irm2activations(irm):
     return act_mat
 
 
+def fast_evals(X, pad=True, is_kernel=False):
+    n = X.shape[0]
+    if is_kernel:
+        pass
+    elif X.shape[0] < X.shape[1]:
+        X = X @ X.T
+    else:
+        X = X.T @ X
+    evals = np.linalg.svd(X, compute_uv=False)
+    if pad:
+        evals = np.concatenate((evals, [0]*(n-len(evals))))
+    return evals
+
+
 def score_matrix_representation(
     X, y=None, metric="l2", p=1, is_kernel=False, regions=False, prune_columns=False, is_evals=False
 ):
@@ -268,29 +282,34 @@ def score_matrix_representation(
     with respect to the sizes of each region (=eigenvalues of X).
     """
 
+    n = X.shape[0]
+
     if prune_columns:
         X = X[:, ~np.all(X[1:] == X[:-1], axis=0)]
 
-    if metric == 'norm' or metric == "entropy":
+    if metric in ['norm', 'entropy', 'h*']:
         if is_evals:
             evals = X
         elif regions:
             _, evals = np.unique(X, axis=0, return_counts=True)
         else:
-            evals = np.linalg.svd(X, compute_uv=False)
-            if not is_kernel:
-                evals = evals ** 2
+            evals = fast_evals(X, pad=False, is_kernel=is_kernel)
         if metric == 'norm':
             score = np.sum(evals ** p) ** (1 / p)
-        elif metric == "entropy":
+        elif metric == 'entropy':
             evals = evals[evals > 0]
             score = (evals * np.log(evals)).sum()
+        elif metric == 'h*':
+            score = np.asarray([
+                i / n + np.sqrt(np.sum(evals[i:]) / n) for i in range(len(evals)+1)
+            ])
+            score = score.argmin()
     elif metric == "n_regions":
         score = len(np.unique(X, axis=0))
     elif metric == "row_means":
         score = np.sum(np.mean(X, axis=0) ** p) ** (1 / p)
     elif metric == "col_means":
-        score = np.sum(np.mean(X, axis=1) ** p) ** (1 / p)
+        score = np.sum(np.mean(X, axis=1) ** p) ** (1 / p)        
     else:
         raise ValueError(f'Metric {metric} is not valid')
 
