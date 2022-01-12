@@ -414,19 +414,6 @@ def get_polytopes(model, train_x, penultimate=False):
     return polytope_memberships, last_activations
 
 
-def irm2activations(irm):
-    """
-    Converts an internal representation matrix to an activation matrix.
-    Each activation region is a unique row in the internal representation.
-    """
-
-    regions, inverses = np.unique(irm, axis=0, return_inverse=True)
-    act_mat = np.zeros((irm.shape[0], len(regions)))
-    act_mat[np.arange(irm.shape[0]), inverses] = 1
-
-    return act_mat
-
-
 def run_internal_rep_experiment(
     n_iterations,
     increase_depth=False,

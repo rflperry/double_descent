@@ -199,3 +199,99 @@ def compute_df_gini_mean(model, data, labels):
 
         gini_mean_score.append(np.array(gini_arr).mean())
     return np.array(gini_mean_score).mean()
+
+
+"""
+Matrix metrics
+"""
+
+
+def irm2activations(irm):
+    """
+    Converts an internal representation matrix to an activation matrix.
+    Each activation region is a unique row in the internal representation.
+    """
+
+    regions, inverses = np.unique(irm, axis=0, return_inverse=True)
+    act_mat = np.zeros((irm.shape[0], len(regions)))
+    act_mat[np.arange(irm.shape[0]), inverses] = 1
+
+    return act_mat
+
+
+def score_matrix_representation(
+    X, y=None, metric="l2", p=1, is_kernel=False, regions=False, prune_columns=False, is_evals=False
+):
+    """
+    Scores a matrix encoding.
+
+    Parameters
+    ----------
+    X : numpy.ndarray, shape (n, p)
+        Internal representation
+
+    y : numpy.ndarray, shape (n,) (default=None)
+        Targets, if needed for the metric
+
+    metric : str (default='norm')
+        Metric to apply to X, among the following choices
+        - 'norm' : Lp norm of the eigenvalues
+        - 'n_regions' : number of unique rows in X
+        - 'entropy' : entropy of the eigenvalues
+        - 'rows_mean' : mean of the rows
+        - 'cols_mean' : mean of the columns
+
+    p : int (default=1)
+        Value to use for some metrics
+
+    is_kernel : boolean (default=False)
+        If True, X is a symmetric kernel matrix
+
+    regions : boolean (default=False)
+        If True, applies the metric to the regions encoded
+        by the rows.
+
+    prune_columns : boolean (default=False)
+        If True, removes all columns which are constant
+
+    is_evals : boolean (default=False)
+        If True, then X is taken to be a vector of eigenvalues
+
+    Returns
+    -------
+    score : float
+
+    Notes
+    -----
+    If X is a region assignment matrix, the L0 norm is the number
+    of regions, L1 is the number of samples, and Lp norms are
+    with respect to the sizes of each region (=eigenvalues of X).
+    """
+
+    if prune_columns:
+        X = X[:, ~np.all(X[1:] == X[:-1], axis=0)]
+
+    if metric == 'norm' or metric == "entropy":
+        if is_evals:
+            evals = X
+        elif regions:
+            _, evals = np.unique(X, axis=0, return_counts=True)
+        else:
+            evals = np.linalg.svd(X, compute_uv=False)
+            if not is_kernel:
+                evals = evals ** 2
+        if metric == 'norm':
+            score = np.sum(evals ** p) ** (1 / p)
+        elif metric == "entropy":
+            evals = evals[evals > 0]
+            score = (evals * np.log(evals)).sum()
+    elif metric == "n_regions":
+        score = len(np.unique(X, axis=0))
+    elif metric == "row_means":
+        score = np.sum(np.mean(X, axis=0) ** p) ** (1 / p)
+    elif metric == "col_means":
+        score = np.sum(np.mean(X, axis=1) ** p) ** (1 / p)
+    else:
+        raise ValueError(f'Metric {metric} is not valid')
+
+    return score

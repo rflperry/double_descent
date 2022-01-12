@@ -11,9 +11,9 @@ from sklearn.metrics import zero_one_loss
 from tqdm import tqdm
 
 from partition_decode.dataset import generate_gaussian_parity
-from partition_decode.df_utils import get_tree_evals, get_forest_evals
+from partition_decode.df_utils import get_tree_evals, get_forest_evals, get_forest_irm, get_tree_irm
 from partition_decode.models import ReluNetClassifier
-from partition_decode.dn_utils import irm2activations
+from partition_decode.metrics import irm2activations, score_matrix_representation
 
 
 """
@@ -43,42 +43,14 @@ NETWORK_PARAMS = {
     'hidden_layer_dims': [
         [10],
         [10, 10],
-        [10, 10, 10],
-        # [10, 10, 10, 10],
-        [100],
-        [100, 100],
-        # [100, 100, 100],
-        [1000],
-        # [1000, 1000],
-        [1000, 1000, 1000],
-        # [10000],
     ],
-    # 'hidden_layer_dims': [
-    #     [5],
-    #     [5, 5],
-    #     [5, 5, 5],
-    #     [5, 5, 5, 5],
-    #     [5, 5, 5, 5, 5],
-    #     [10],
-    #     [10, 10],
-    #     [10, 10, 10],
-    #     [10, 10, 10, 10, 10],
-    #     [50, 50],
-    #     [50, 50, 50],
-    #     [50, 50, 50, 50],
-    #     [100],
-    #     [100, 100],
-    #     [100, 100, 100],
-    #     [1000],
-    #     [1000, 1000]
-    # ],
     # 'hidden_layer_dims': sum([
     #     [
     #         [2**width_factor]*(1.5**depth_factor).astype(int)
     #         for depth_factor in np.arange(1, 9-width_factor+1)
     #     ] for width_factor in np.arange(1, 9)
     # ], []),
-    'n_epochs': [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048],
+    'n_epochs': [1000], # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048],
     'learning_rate': [0.01],
     'batch_size': [128],
     'verbose': [0],
@@ -86,11 +58,14 @@ NETWORK_PARAMS = {
 }
 
 MODEL_METRICS = {
-    'tree': ['irm_l2', 'activated_regions', 'regions_l2' 'n_leaves'],
-    'forest': ['irm_l2', 'activated_regions', 'regions_l2', 'n_total_leaves'],
+    'ALL': [
+        'IRM_L2', 'n_regions', 'ACTS_L2', 'entropy',
+        'rows_mean_L1', 'rows_mean_L2', 'cols_mean_L1', 'cols_mean_L2'
+        ],
+    'tree': ['n_leaves'],
+    'forest': ['n_total_leaves'],
     'network': [
-        'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
-        'irm_l2_all', 'activated_regions_all', 'regions_l2_all',
+        # 'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
         'n_parameters', 'depth', 'width'
         ],
 }
@@ -113,8 +88,8 @@ def run_tree(X_train, y_train, X_test, model_params):
     y_train_pred = tree.predict(X_train)
     y_test_pred = tree.predict(X_test)
     # same as activation evals
-    irm_evals = get_tree_evals(tree, X_train)
-    model_metrics = get_eigenval_metrics(irm_evals, irm_evals)
+    irm = get_tree_irm(tree, X_train)
+    model_metrics = get_eigenval_metrics(irm)
     model_metrics += [tree.get_n_leaves()]
 
     return y_train_pred, y_test_pred, model_metrics
@@ -133,8 +108,8 @@ def run_forest(X_train, y_train, X_test, model_params):
     y_train_pred = model.predict(X_train)
     y_test_pred = model.predict(X_test)
     
-    irm_evals, act_evals = get_forest_evals(model, X_train)
-    model_metrics = get_eigenval_metrics(irm_evals, act_evals)
+    irm = get_forest_irm(model, X_train)
+    model_metrics = get_eigenval_metrics(irm)
     model_metrics += [np.sum([tree.get_n_leaves() for tree in model.estimators_])]
 
     return y_train_pred, y_test_pred, irm_evals, act_evals, model_metrics
@@ -148,22 +123,8 @@ def run_network(X_train, y_train, X_test, model_params):
     y_test_pred = model.predict(X_test)
 
     irm = model.get_internal_representation(X_train, penultimate=False)
-    irm_evals_pen = np.linalg.svd(
-        irm[:, -model.hidden_layer_dims[-1]:],
-        compute_uv=False)**2 / irm.shape[1]
-    irm_evals_all = np.linalg.svd(
-        irm, 
-        compute_uv=False)**2 / irm.shape[1]
 
-    act_evals_all = np.linalg.svd(
-        irm2activations(irm),
-        compute_uv=False)**2
-    act_evals_pen = np.linalg.svd(
-        irm2activations(irm[:, -model.hidden_layer_dims[-1]:]),
-        compute_uv=False)**2
-
-    model_metrics = get_eigenval_metrics(irm_evals_pen, act_evals_pen)
-    model_metrics += get_eigenval_metrics(irm_evals_all, act_evals_all)
+    model_metrics = get_eigenval_metrics(irm)
     model_metrics += [
         model.n_parameters_, len(model.hidden_layer_dims),
         model.hidden_layer_dims[0]
@@ -192,11 +153,23 @@ def get_y_metrics(y_true, y_pred):
     return [error]
 
 
-def get_eigenval_metrics(irm_evals, act_evals):
-    irm_l2 = np.linalg.norm(irm_evals, ord=2)
-    activated_regions = np.sum(act_evals > 0)
-    regions_l2 = np.linalg.norm(act_evals, ord=2)
-    return [irm_l2, activated_regions, regions_l2]
+def get_eigenval_metrics(irm):
+    metric_params = [
+        {'metric': 'norm', 'p': 2},
+        {'metric': 'n_regions'},
+        {'metric': 'norm', 'p': 2, 'regions': True},
+        {'metric': 'entropy'},
+        {'metric': 'row_means', 'p': 1},
+        {'metric': 'row_means', 'p': 2},
+        {'metric': 'col_means', 'p': 1},
+        {'metric': 'col_means', 'p': 2},
+    ]
+    metrics = []
+    for params in metric_params:
+        metrics.append(
+            score_matrix_representation(irm, **params)
+        )
+    return metrics
 
 
 """
@@ -230,6 +203,7 @@ def main(args):
             "train_01_error",
             "test_01_error",
         ]
+        + MODEL_METRICS['ALL']
         + MODEL_METRICS[args.model]
     )
     f = open(
