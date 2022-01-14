@@ -113,6 +113,21 @@ def compute_ece_loss(y_true, y_proba, n_bins=10):
     return ece_loss
 
 
+def mse_classification(y_true, y_pred):
+    """
+    Compute mean squared error on predicted posteriors.
+    
+    Parameters
+    ----------
+    y_true : numpy.ndarray, shape (n,)
+
+    y_pred : numpy.ndarray, shape (n, k)
+    
+    """
+    y_pred[:, y_true] -= 1
+    return np.mean(np.linalg.norm(y_pred, axis=1))
+
+
 """
 Deep Net metrics
 """

@@ -60,7 +60,7 @@ def generate_gaussian_parity(
     blob = np.concatenate(
         [
             np.random.multivariate_normal(
-                mean, cov_scale * np.eye(len(mean)), size=int(n_samples / 4)
+                mean, cov_scale * np.eye(len(mean)), size=n_samples // 4
             )
             for mean in means
         ]
@@ -68,7 +68,7 @@ def generate_gaussian_parity(
 
     X = np.zeros_like(blob)
     Y = np.concatenate(
-        [np.ones((int(n_samples / 4))) * int(i < 2) for i in range(len(means))]
+        [np.ones((n_samples // 4)) * int(i < 2) for i in range(len(means))]
     )
     X[:, 0] = blob[:, 0] * np.cos(angle_params * np.pi / 180) + blob[:, 1] * np.sin(
         angle_params * np.pi / 180
@@ -78,6 +78,82 @@ def generate_gaussian_parity(
     )
 
     return X, Y.astype(int)
+
+
+def recursive_gaussian_parity(
+    n_samples,
+    means=None,
+    cov_scale=1,
+    recurse_level=1,
+    angle_params=None,
+    random_state=None,
+):
+    """
+    Generate 2-dimensional distribution akin to Gaussian XOR but two adjacent
+    partitions of the four XOR partitions are themselves smaller Gaussian XOR.
+
+    Parameters
+    ----------
+    n_samples : int
+        Total number of points divided among the four clusters with equal probability.
+
+    cov_scale : float, default=1
+        The standard deviation of the blobs.
+
+    recurse_level : int, default=1
+        Number of times to recurse
+
+    angle_params: float, default=None
+        Number of radians to rotate the distribution by.
+
+    random_state : int, RandomState instance, default=None
+        Determines random number generation for dataset creation. Pass an int
+        for reproducible output across multiple function calls.
+
+    Returns
+    -------
+    X : array of shape [n_samples, 2]
+        The generated samples.
+
+    y : array of shape [n_samples]
+        The integer labels for cluster membership of each sample.
+    """
+
+    means = np.asarray([[-1, -1], [1, 1], [1, -1], [-1, 1]])
+
+    X, y = generate_gaussian_parity(
+        n_samples,
+        means=means,
+        cov_scale=cov_scale,
+        angle_params=angle_params,
+        random_state=random_state,
+    )
+    if recurse_level == 0:
+        return X, y
+
+    X_recurs, y_recurs = recursive_gaussian_parity(
+        n_samples // 4,
+        means=means,
+        recurse_level=recurse_level-1,
+        cov_scale=cov_scale,
+        angle_params=angle_params,
+        random_state=random_state,
+    )
+
+    # Recurse impute
+    adj_indices = [
+        np.arange(n_samples // 4),
+        np.arange(3 * n_samples // 4, n_samples),
+    ]
+
+    for idx, mean in zip(adj_indices, means[[0, 3]]):
+        X[idx] = X_recurs
+        y[idx] = y_recurs
+        X[idx] /= 2
+        X[idx] += mean
+        
+
+    return X, y
 
 
 def get_dataset(
@@ -184,3 +260,116 @@ def get_dataset(
         return train_x, train_y, test_x, test_y, hybrid_sets
 
     return train_x, train_y, test_x, test_y
+
+
+def generate_spirals(
+    n_samples,
+    n_class=2,
+    noise=1,
+    random_state=None,
+):
+    """
+    Generate 2-dimensional spiral simulation
+    Parameters
+    ----------
+    n_samples : int
+        Total number of points divided among the individual spirals.
+    n_class : array of shape [n_centers], optional (default=2)
+        Number of class for the spiral simulation.
+    noise : float, optional (default=0.3)
+        Parameter controlling the spread of each class.
+    random_state : int, RandomState instance, default=None
+        Determines random number generation for dataset creation. Pass an int
+        for reproducible output across multiple function calls.
+    Returns
+    -------
+    X : array of shape [n_samples, 2]
+        The generated samples.
+    y : array of shape [n_samples]
+        The integer labels for cluster membership of each sample.
+    """
+
+    if random_state != None:
+        np.random.seed(random_state)
+
+    X = []
+    y = []
+
+    if n_class == 2:
+        turns = 2
+    elif n_class == 3:
+        turns = 2.5
+    elif n_class == 5:
+        turns = 3.5
+    elif n_class == 7:
+        turns = 4.5
+    else:
+        raise ValueError("sorry, can't currently support %s classes " % n_class)
+
+    mvt = np.random.multinomial(n_samples, 1 / n_class * np.ones(n_class))
+
+    if n_class == 2:
+        r = np.random.uniform(0, 1, size=int(n_samples / n_class))
+        r = np.sort(r)
+        t = np.linspace(
+            0, np.pi * 4 * turns / n_class, int(n_samples / n_class)
+        ) + np.random.normal(0, noise, int(n_samples / n_class))
+        dx = r * np.cos(t)
+        dy = r * np.sin(t)
+
+        X.append(np.vstack([dx, dy]).T)
+        X.append(np.vstack([-dx, -dy]).T)
+        y += [0] * int(n_samples / n_class)
+        y += [1] * int(n_samples / n_class)
+    else:
+        for j in range(1, n_class + 1):
+            r = np.linspace(0.01, 1, int(mvt[j - 1]))
+            t = (
+                np.linspace(
+                    (j - 1) * np.pi * 4 * turns / n_class,
+                    j * np.pi * 4 * turns / n_class,
+                    int(mvt[j - 1]),
+                )
+                + np.random.normal(0, noise, int(mvt[j - 1]))
+            )
+
+            dx = r * np.cos(t)
+            dy = r * np.sin(t)
+
+            dd = np.vstack([dx, dy]).T
+            X.append(dd)
+            y += [j - 1] * int(mvt[j - 1])
+
+    return np.vstack(X), np.array(y).astype(int)
+
+
+def load_mnist(
+    n_samples=60000,
+    reshape=True,
+    save_path='./torchvision_datasets',
+    train=True,
+    random_state=None,
+):
+    """
+    By default, 60000 training samples and 10000 test samples
+    """
+    from torchvision import datasets
+
+    if train and n_samples > 60000:
+        from warnings import warn
+        warn("MNIST training set has max 60000 samples. Providing 60000 samples.")
+    elif not train and n_samples > 10000:
+        from warnings import warn
+        warn("MNIST test set has max 10000 samples. Providing 10000 samples.")
+
+    dataset = datasets.MNIST(save_path, train=train, download=True)
+    X = dataset.data.numpy()[:n_samples]
+    if reshape:
+        X = X.reshape((X.shape[0], -1))
+    y = dataset.targets.numpy()[:n_samples]
+
+    np.random.seed(random_state)
+    idx = np.arange(0, X.shape[0])
+    np.random.shuffle(idx)
+
+    return X[idx], y[idx]

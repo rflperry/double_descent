@@ -27,7 +27,9 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         callbacks=[],
         use_gpu=False,
         verbose=0,
-        early_stop_thresh=0,
+        early_stop_thresh=None,
+        bias=True,
+        loss=torch.nn.CrossEntropyLoss,
     ):
 
         self.history_ = None
@@ -42,9 +44,9 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
             setattr(self, arg, val)
         self.hidden_layer_dims = list(self.hidden_layer_dims)
 
-    def _build_model(self):
-        self._layer_dims = [self.input_dim_] + self.hidden_layer_dims + [
-            self.output_dim_]
+    def _build_model(self, input_dim, output_dim):
+        self._layer_dims = [input_dim] + self.hidden_layer_dims + [
+            output_dim]
 
         self.model_ = torch.nn.Sequential()
 
@@ -52,12 +54,14 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         # create each hidden layer with relu activation.
         for idx, dim in enumerate(self._layer_dims):
             if idx < len(self._layer_dims) - 1:
-                module = torch.nn.Linear(dim, self._layer_dims[idx + 1])
+                module = torch.nn.Linear(dim, self._layer_dims[idx + 1], bias=self.bias)
                 init.xavier_uniform_(module.weight)
                 self.model_.add_module("linear" + str(idx), module)
 
             if idx < len(self._layer_dims) - 2:
                 self.model_.add_module("relu" + str(idx), torch.nn.ReLU())
+            # else:
+            #     self.model_.add_module("softmax" + str(idx), torch.nn.Softmax(dim=1))
 
         if self.gpu_:
             self.model_ = self.model_.cuda()
@@ -74,11 +78,13 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
             train, batch_size=self.batch_size, shuffle=self.shuffle
         )
 
-        loss_fn = torch.nn.BCEWithLogitsLoss()
+        loss_fn = self.loss()
+        self.model_.train()
+        # optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.SGD(self.model_.parameters(), lr=self.learning_rate, momentum=0.95)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=500, gamma=0.1)
 
-        optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.learning_rate)
-
-        self.history_ = {"bce_loss": [], "01_error": []}
+        self.history_ = {self.loss.__name__: [], "01_error": []}
 
         finish = False
         for epoch in range(self.n_epochs):
@@ -86,35 +92,43 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
                 break
 
             loss = None
-            idx = 0
+
             for idx, (minibatch, target) in enumerate(train_loader):
                 y_pred = self.model_(Variable(minibatch))
 
                 loss = loss_fn(
+                    # torch.sigmoid(
+                    #     y_pred
+                    # ),
                     y_pred,
-                    Variable(target.cuda().float() if self.gpu_ else target.float()),
+                    # Variable(target.cuda().float() if self.gpu_ else target.float()),
+                    Variable(target.cuda().long() if self.gpu_ else target.long()),
                 )
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
+            
+            scheduler.step()
 
-            y_labels = target.cpu().numpy() if self.gpu_ else target.numpy()
-            y_pred_results = torch.nn.functional.softmax(
-                y_pred.cpu().detach() if self.gpu_ else y_pred.detach(), dim=1
-            ).numpy()
+            y_labels = (target.cpu() if self.gpu_ else target).numpy()
+            # y_pred_results = torch.nn.functional.softmax(
+            #     y_pred.cpu().detach() if self.gpu_ else y_pred.detach(), dim=1
+            # ).numpy()
+            y_pred_results = (y_pred.cpu().detach() if self.gpu_ else y_pred.detach()).numpy().argmax(1)
 
-            error = zero_one_loss(y_pred_results.argmax(1), y_labels.argmax(1))
-            if error <= self.early_stop_thresh:
+            error = zero_one_loss(y_pred_results, y_labels)
+            total_error = zero_one_loss(self.predict(X), y)
+
+            if self.early_stop_thresh is not None and total_error <= self.early_stop_thresh:
                 finish = True
 
             self.history_["01_error"].append(error)
-            self.history_["bce_loss"].append(loss.detach().item())
+            self.history_[self.loss.__name__].append(loss.detach().item())
 
             if self.verbose > 0 and epoch % 5 == 0:
                 print(
-                    "Results for epoch {}, bce_loss={:.2f}, 01_error={:.2f}".format(
-                        epoch + 1, loss.detach().item(), error
+                    f"Results for epoch {epoch + 1}, {self.loss.__name__}={loss.detach().item():.2f}, 01_error={error:.2f}".format(
                     )
                 )
             for callback in self.callbacks:
@@ -122,6 +136,9 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
                 if callback.finish:
                     finish = True
                     break
+
+        self.model_.eval()
+
 
     def _reshape_targets(self, y):
         """
@@ -138,11 +155,9 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         Trains the pytorch ReLU network classifier
         """
 
-        y = self._reshape_targets(y)
-        self.input_dim_ = X.shape[1]
-        self.output_dim_ = y.shape[1]
-        
-        self._build_model()
+        self._build_model(X.shape[1], len(np.unique(y)))
+
+        # y = self._reshape_targets(y)
         self._train_model(X, y)
 
         return self
@@ -160,13 +175,14 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         # In case the requested size of prediction is too large for memory (especially gpu)
         # split into batchs, roughly similar to the original training batch size. Not
         # particularly scientific but should always be small enough.
-        for batch in np.array_split(X, split_size):
-            x_pred = Variable(torch.from_numpy(batch).float())
-            y_pred = self.model_(x_pred.cuda() if self.gpu_ else x_pred)
-            y_pred_formatted = torch.nn.functional.softmax(
-                y_pred.cpu().detach() if self.gpu_ else y_pred.detach(), dim=1
-            ).numpy()
-            results += [y_pred_formatted]
+        with torch.no_grad():
+            for batch in np.array_split(X, split_size):
+                x_pred = Variable(torch.from_numpy(batch).float())
+                y_pred = self.model_(x_pred.cuda() if self.gpu_ else x_pred)
+                y_pred_formatted = torch.nn.functional.softmax(
+                    y_pred.cpu() if self.gpu_ else y_pred, dim=1
+                ).numpy()
+                results += [y_pred_formatted]
 
         return np.vstack(results)
 
