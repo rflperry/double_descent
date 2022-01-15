@@ -1,2 +1,1 @@
-python run_xor.py --n_reps 5 --model forest
-python run_xor.py --n_reps 1 --model network
+python run_experiment.py --n_reps 3 --model network --dataset mnist --fix_train_data

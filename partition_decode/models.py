@@ -32,6 +32,8 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         loss=torch.nn.CrossEntropyLoss,
     ):
 
+        assert isinstance(hidden_layer_dims, (list, np.ndarray))
+
         self.history_ = None
         self.model_ = None
         self.gpu_ = use_gpu and torch.cuda.is_available()
@@ -154,7 +156,6 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         """
         Trains the pytorch ReLU network classifier
         """
-
         self._build_model(X.shape[1], len(np.unique(y)))
 
         # y = self._reshape_targets(y)
@@ -207,7 +208,7 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
     def n_parameters_(self):
         return sum(p.numel() for p in self.model_.parameters())
 
-    def get_internal_representation(self, X, penultimate=True):
+    def get_internal_representation(self, X, penultimate=False):
         """
         Returns the internal reprensetation matrix, encoding which samples
         activate which ReLUs. If penultimate=True, only returns the matrix
@@ -219,16 +220,17 @@ class ReluNetClassifier(BaseEstimator, ClassifierMixin):
         split_size = math.ceil(len(X) / self.batch_size)
         
         irm = []
-        for batch in np.array_split(X, split_size):
-            batch_irm = []
-            x_pred = Variable(torch.from_numpy(batch).float())
-            for module in next(self.model_.modules()):
-                x_pred = module(x_pred.detach())
-                if type(module) == torch.nn.modules.activation.ReLU:
-                    batch_irm.append((x_pred.detach().numpy() > 0).astype(int))
-            if penultimate:
-                irm.append(batch_irm[-1])
-            else:
-                irm.append(np.hstack(batch_irm))
+        with torch.no_grad():
+            for batch in np.array_split(X, split_size):
+                batch_irm = []
+                x_pred = Variable(torch.from_numpy(batch).float())
+                for module in next(self.model_.modules()):
+                    x_pred = module(x_pred)
+                    if type(module) == torch.nn.modules.activation.ReLU:
+                        batch_irm.append((x_pred.numpy() > 0).astype(int))
+                if penultimate:
+                    irm.append(batch_irm[-1])
+                else:
+                    irm.append(np.hstack(batch_irm))
         
         return np.vstack(irm)

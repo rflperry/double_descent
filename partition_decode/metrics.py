@@ -320,7 +320,7 @@ def score_matrix_representation(
             ])
             score = score.argmin()
     elif metric == "n_regions":
-        score = len(np.unique(X, axis=0))
+        score = np.unique(X.astype(int), axis=0).shape[0]
     elif metric == "row_means":
         score = np.sum(np.mean(X, axis=0) ** p) ** (1 / p)
     elif metric == "col_means":
