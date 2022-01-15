@@ -252,8 +252,6 @@ def get_eigenval_metrics(irm):
         {"metric": "col_means", "p": 2},
     ]
 
-    # Prune columns that are the same
-
     metrics = []
     evals = fast_evals(irm)
     for params in metric_params:
