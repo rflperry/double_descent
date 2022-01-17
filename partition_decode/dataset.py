@@ -349,6 +349,7 @@ def load_mnist(
     save_path='./torchvision_datasets',
     train=True,
     random_state=None,
+    onehot=False,
 ):
     """
     By default, 60000 training samples and 10000 test samples
@@ -365,8 +366,13 @@ def load_mnist(
     dataset = datasets.MNIST(save_path, train=train, download=True)
     X = dataset.data.numpy()[:n_samples]
     if reshape:
-        X = X.reshape((X.shape[0], -1))
-    y = dataset.targets.numpy()[:n_samples]
+        X = X.reshape((X.shape[0], -1))Sqroot99
+        
+
+    if onehot:
+        y = nn.functional.one_hot(dataset.targets).numpy()[:n_samples]
+    else:
+        y = dataset.targets.numpy()[:n_samples]
 
     np.random.seed(random_state)
     idx = np.arange(0, X.shape[0])

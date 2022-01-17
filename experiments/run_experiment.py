@@ -1,8 +1,5 @@
 """Runs the Gaussian XOR experiment"""
 
-import sys
-
-sys.path.append("../")
 from argparse import ArgumentParser
 from pathlib import Path
 import itertools
@@ -12,6 +9,7 @@ import numpy as np
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import zero_one_loss, mean_squared_error
+from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 from joblib import Parallel, delayed
 
@@ -27,7 +25,7 @@ from partition_decode.df_utils import (
     get_forest_irm,
     get_tree_irm,
 )
-from partition_decode.models import ReluNetClassifier
+from partition_decode.models import ReluNetClassifier, ReluNetRegressor
 from partition_decode.metrics import (
     irm2activations,
     score_matrix_representation,
@@ -57,7 +55,7 @@ DATA_PARAMS_DICT = {
     "mnist": {
         "n_train_samples": 4000,
         "n_test_samples": 10000,
-        "save_path": "~/Documents/datasets/torchvision",
+        "save_path": "/mnt/ssd3/ronan/pytorch",
     },
 }
 
@@ -77,18 +75,16 @@ FOREST_PARAMS = {
 
 NETWORK_PARAMS = {
     "hidden_layer_dims":
+    #     [4], [16], [38], [51], [64], [256]
+    # ],
         [[4], [8], [16], [32], [38]]
-        + [[i] for i in range(40, 62, 1)]
+        + [[i] for i in range(40, 52, 2)]
+        + [[51]]
+        + [[i] for i in range(52, 64, 2)]
         + [[64], [128], [256], [512], [1024]],
-    # 'hidden_layer_dims': sum([
-    #     [
-    #         [2**width_factor]*(1.5**depth_factor).astype(int)
-    #         for depth_factor in np.arange(1, 9-width_factor+1)
-    #     ] for width_factor in np.arange(1, 9)
-    # ], []),
-    "n_epochs": [1000],  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
-    "learning_rate": [1e-5],
-    "batch_size": [128],
+    "n_epochs": [6000],  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
+    "learning_rate": [1e-2],
+    "batch_size": [32],
     "verbose": [0],
     "early_stop_thresh": [0],
     "bias": [True],
@@ -110,7 +106,13 @@ MODEL_METRICS = {
     ],
     "tree": ["n_leaves"],
     "forest": ["n_total_leaves"],
-    "network": [
+    "relu_classifier": [
+        # 'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
+        "n_parameters",
+        "depth",
+        "width",
+    ],
+    "relu_regressor": [
         # 'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
         "n_parameters",
         "depth",
@@ -123,7 +125,7 @@ Experiment run functions
 """
 
 
-def load_Xy_data(dataset, n_samples, random_state, data_params, train=None):
+def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, onehot=False):
     if dataset == "xor":
         X, y = recursive_gaussian_parity(
             n_samples=n_samples,
@@ -136,7 +138,7 @@ def load_Xy_data(dataset, n_samples, random_state, data_params, train=None):
         X, y = generate_spirals(n_samples=n_samples, random_state=random_state)
     elif dataset == "mnist":
         X, y = load_mnist(
-            n_samples=n_samples, save_path=data_params["save_path"], train=train,
+            n_samples=n_samples, save_path=data_params["save_path"], train=train, onehot=onehot
         )
 
     return X, y
@@ -173,29 +175,73 @@ def run_forest(X_train, y_train, X_test, model_params, model=None):
     return model, y_train_pred, y_test_pred, model_metrics
 
 
-def run_network(X_train, y_train, X_test, model_params, model=None):
+def run_relu_classifier(X_train, y_train, X_test, model_params, prior_model=None):
     # Impute prior model weights if given
-    if model is not None and (
+    if prior_model is not None and (
         "init_prior_model" in model_params.keys() and model_params["init_prior_model"]
     ):
-        new_model = ReluNetClassifier(**del_dict_keys(model_params, ["init_prior_model"]))
-        new_model._build_model(X_train.shape[-1], len(np.unique(y_train)))
-        with torch.no_grad():
-            for prior_layer, new_layer in zip(model.model_, new_model.model_,):
-                if isinstance(new_layer, torch.nn.ReLU):
-                    continue
-                width, depth = prior_layer.weight.shape
-                new_layer.weight[:width, :depth] = prior_layer.weight
+        model = ReluNetClassifier(**del_dict_keys(model_params, ["init_prior_model"]))
+        model._build_model(X_train.shape[-1], len(np.unique(y_train)))
 
-        model = new_model
-        model._build_model(X_train.shape[1], len(np.unique(y_train)))
+        # Stability of decreasing training error
+        if model.n_parameters_ < X_train.shape[0] * len(np.unique(y_train)):
+            with torch.no_grad():
+                for prior_layer, new_layer in zip(prior_model.model_, model.model_,):
+                    if isinstance(new_layer, torch.nn.ReLU):
+                        continue
+                    width, depth = prior_layer.weight.shape
+                    new_layer.weight[:width, :depth] = prior_layer.weight
+                    new_layer.bias[:width] = prior_layer.bias
+
     else:
         model = ReluNetClassifier(**del_dict_keys(model_params, ["init_prior_model"]))
+        model._build_model(X_train.shape[1], len(np.unique(y_train)))
 
-    model.fit(X_train, y_train)
+    # Can't fit or it will overwrite the built weights
+    model._train_model(X_train, y_train)
 
     y_train_pred = model.predict_proba(X_train)
     y_test_pred = model.predict_proba(X_test)
+
+    irm = model.get_internal_representation(X_train, penultimate=False)
+
+    model_metrics = get_eigenval_metrics(irm)
+    model_metrics += [
+        model.n_parameters_,
+        len(model.hidden_layer_dims),
+        model.hidden_layer_dims[0],
+    ]
+
+    return model, y_train_pred, y_test_pred, model_metrics
+
+
+def run_relu_regressor(X_train, y_train, X_test, model_params, prior_model=None):
+    # Impute prior model weights if given
+    if prior_model is not None and (
+        "init_prior_model" in model_params.keys() and model_params["init_prior_model"]
+    ):
+        model = ReluNetRegressor(**del_dict_keys(model_params, ["init_prior_model"]))
+        model._build_model(X_train.shape[-1], y_train.shape[1])
+
+        # Stability of decreasing training error
+        if model.n_parameters_ < X_train.shape[0] * y_train.shape[1]:
+            with torch.no_grad():
+                for prior_layer, new_layer in zip(prior_model.model_, model.model_,):
+                    if isinstance(new_layer, torch.nn.ReLU):
+                        continue
+                    width, depth = prior_layer.weight.shape
+                    new_layer.weight[:width, :depth] = prior_layer.weight
+                    new_layer.bias[:width] = prior_layer.bias
+
+    else:
+        model = ReluNetRegressor(**del_dict_keys(model_params, ["init_prior_model"]))
+        model._build_model(X_train.shape[1], y_train.shape[1])
+
+    # Can't fit or it will overwrite the built weights
+    model._train_model(X_train, y_train)
+
+    y_train_pred = model.predict(X_train)
+    y_test_pred = model.predict(X_test)
 
     irm = model.get_internal_representation(X_train, penultimate=False)
 
@@ -230,11 +276,18 @@ def clean_results(results):
     return cleaned
 
 
+
 def get_y_metrics(y_true, y_pred):
-    errors = [
-        zero_one_loss(y_true, y_pred.argmax(1)),
-        mse_classification(y_true, y_pred),
-    ]
+    if y_true.ndim == 1:
+        errors = [
+            zero_one_loss(y_true, y_pred.argmax(1)),
+            mse_classification(y_true, y_pred),
+        ]
+    else:
+        errors = [
+            zero_one_loss(y_true.argmax(1), y_pred.argmax(1)),
+            mean_squared_error(y_true, y_pred),
+        ]
     return errors
 
 
@@ -277,9 +330,12 @@ def main(args):
     elif args.model == "forest":
         model_params_dict = FOREST_PARAMS
         run_model = run_forest
-    elif args.model == "network":
+    elif args.model == "relu_classifier":
         model_params_dict = NETWORK_PARAMS
-        run_model = run_network
+        run_model = run_relu_classifier
+    elif args.model == "relu_regressor":
+        model_params_dict = NETWORK_PARAMS
+        run_model = run_relu_regressor
 
     # Create folder to save results to
     if args.output_dir is None:
@@ -320,6 +376,7 @@ def main(args):
         random_state=12345,
         data_params=data_params,
         train=False,
+        onehot=(args.model=="relu_regressor")
     )
 
     # Iterate over repetitions
@@ -333,14 +390,18 @@ def main(args):
                 random_state=0 if args.fix_train_data else rep,
                 data_params=data_params,
                 train=True,
+                onehot=(args.model=="relu_regressor"),
             )
+            min_max_scaler = MinMaxScaler()
+            X_train = min_max_scaler.fit_transform(X_train)
+
         model = None
 
         # Iterate over models
         for model_params in model_params_grid:
             # Train and test model
             model, y_train_pred, y_test_pred, model_metrics = run_model(
-                X_train, y_train, X_test, model_params, model
+                X_train, y_train, min_max_scaler.transform(X_test), model_params, model
             )
 
             # Compute metrics
@@ -364,7 +425,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Runs experiment")
 
     parser.add_argument(
-        "--model", choices=["tree", "forest", "network"], help="Experiment to run"
+        "--model", choices=["tree", "forest", "relu_classifier", "relu_regressor"], help="Experiment to run"
     )
     parser.add_argument(
         "--dataset", choices=["xor", "spiral", "mnist"], help="Experiment to run"
