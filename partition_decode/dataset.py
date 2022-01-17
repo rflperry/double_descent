@@ -366,7 +366,7 @@ def load_mnist(
     dataset = datasets.MNIST(save_path, train=train, download=True)
     X = dataset.data.numpy()[:n_samples]
     if reshape:
-        X = X.reshape((X.shape[0], -1))Sqroot99
+        X = X.reshape((X.shape[0], -1))
         
 
     if onehot:
