@@ -32,6 +32,7 @@ from partition_decode.metrics import (
     fast_evals,
     mse_classification,
 )
+from partition_decode.dn_utils import get_norm_irm
 
 
 """
@@ -53,7 +54,7 @@ DATA_PARAMS_DICT = {
         "n_test_samples": N_TEST_SAMPLES,
     },
     "mnist": {
-        "n_train_samples": 4000,
+        "n_train_samples": 10000,
         "n_test_samples": 10000,
         "save_path": "/mnt/ssd3/ronan/pytorch",
     },
@@ -65,12 +66,12 @@ TREE_PARAMS = {
 }
 
 FOREST_PARAMS = {
-    "n_estimators": [1, 2, 3, 4, 5, 10, 20],
+    "n_estimators": [1], # 2, 3, 4, 5, 7, 10, 13, 16, 20],
     # "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [2, 3, 4, 6, 8, 10, 15, 20, None],
-    "n_jobs": [-1],
+    "max_depth": list(range(1, 40)) + [None],
+    "n_jobs": [-2],
 }
 
 NETWORK_PARAMS = {
@@ -100,9 +101,9 @@ MODEL_METRICS = {
         "IRM_h*",
         "ACTS_h*",
         "entropy",
-        "rows_mean_L2",
-        "cols_mean_L1",
-        "cols_mean_L2",
+        "IRM_rows_mean_L2",
+        "IRM_cols_mean_L1",
+        "IRM_cols_mean_L2",
     ],
     "tree": ["n_leaves"],
     "forest": ["n_total_leaves"],
@@ -111,12 +112,14 @@ MODEL_METRICS = {
         "n_parameters",
         "depth",
         "width",
+        "weights_L2",
     ],
     "relu_regressor": [
         # 'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
         "n_parameters",
         "depth",
         "width",
+        "weights_L2",
     ],
 }
 
@@ -210,6 +213,7 @@ def run_relu_classifier(X_train, y_train, X_test, model_params, prior_model=None
         model.n_parameters_,
         len(model.hidden_layer_dims),
         model.hidden_layer_dims[0],
+        np.linalg.norm(model.model_[0].weight)
     ]
 
     return model, y_train_pred, y_test_pred, model_metrics
@@ -250,6 +254,7 @@ def run_relu_regressor(X_train, y_train, X_test, model_params, prior_model=None)
         model.n_parameters_,
         len(model.hidden_layer_dims),
         model.hidden_layer_dims[0],
+        np.linalg.norm(model.model_[0].weight)
     ]
 
     return model, y_train_pred, y_test_pred, model_metrics
@@ -274,7 +279,6 @@ def clean_results(results):
             result = ";".join(map(str, result))
         cleaned.append(result)
     return cleaned
-
 
 
 def get_y_metrics(y_true, y_pred):

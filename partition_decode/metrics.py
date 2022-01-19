@@ -124,8 +124,9 @@ def mse_classification(y_true, y_pred):
     y_pred : numpy.ndarray, shape (n, k)
     
     """
-    y_pred[:, y_true] -= 1
-    return np.mean(np.linalg.norm(y_pred, axis=1))
+    y_onehot = np.zeros(y_pred.shape)
+    y_onehot[np.arange(y_pred.shape[0]), y_true] = 1
+    return np.mean(np.linalg.norm(y_pred - y_onehot, axis=1))
 
 
 """

@@ -638,6 +638,46 @@ def update_internal_rep_matrices(
             matrices[i][key].append(L_mat)
 
 
+def get_norm_irm(model, X, y=None, ord=2, return_affine=False):
+    """
+    Creates the internal representation matrix of a ReLU
+    network where entries are valued by the norm of the affine function
+    mapping to that entry.
+    """
+    irm = []
+    for x in X:
+        W = np.eye(x.shape[-1]) # account for bias
+        b = np.zeros(x.shape[-1])
+        sample_rep = []
+        with torch.no_grad():
+            x_pred = torch.autograd.Variable(torch.from_numpy(x).float())
+            for module in next(model.model_.modules()):
+                x_pred = module(x_pred)
+
+                if type(module) == torch.nn.modules.activation.ReLU:
+                    act_relus = (x_pred.numpy() > 0).astype(int)
+                    layer_w = np.diag(act_relus)
+                    layer_b = 0
+                else:
+                    layer_w = module.weight.numpy().T
+                    layer_b = module.bias.numpy()
+
+                W =  W @ layer_w
+                b =  b @ layer_w + layer_b
+
+                np.testing.assert_array_almost_equal(x_pred, x @ W + b)
+
+                if type(module) == torch.nn.modules.activation.ReLU:
+                    sample_rep.append(np.linalg.norm(W, ord=ord, axis=0))
+        irm.append(np.hstack(sample_rep))
+    irm = np.vstack(irm)
+
+    if return_affine:
+        return irm, W, b
+    else:
+        return irm
+
+
 """
   Example to run the `Increasing Depth` vs `Increasing Width` experiments
   and plot the figure.
