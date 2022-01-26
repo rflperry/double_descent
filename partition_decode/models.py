@@ -12,7 +12,7 @@ from torch.autograd import Variable
 import torch.utils.data as data_utils
 import torch.nn.init as init
 
-from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin
+from sklearn.base import BaseEstimator, ClassifierMixin, RegressorMixin, TransformerMixin
 from sklearn.metrics import zero_one_loss, mean_squared_error
 
 
@@ -344,3 +344,44 @@ class ReluNetRegressor(ReLuNet, RegressorMixin):
         """
         y_pred = self.predict(X, y)
         return mean_squared_error(y, y_pred)
+
+
+class RandomReluTransform(TransformerMixin):
+    """
+    Creates a random transformation of the features using
+    random weights sampled uniformly from the unit sphere
+    and then applying a ReLU function.
+    """
+
+    def __init__(self, out_features):
+        self.out_features = out_features
+
+    def fit(self, X, y=None):
+        """
+        Fits
+        """
+        self.n_features_ = X.shape[1]
+        self.weights_ = np.random.normal(0, 1, (self.n_features_, self.out_features))
+        self.weights_ /= np.linalg.norm(self.weights_, axis=0)
+
+        return self
+
+    def transform(self, X):
+        """
+        Creates the random ReLU features.
+        """
+        assert hasattr(self, "weights_")
+        rrf = X @ self.weights_
+        rrf[rrf < 0] = 0
+        return rrf
+
+    def fit_transform(self, X, y=None):
+        """
+        Fits and creates random ReLU features.
+        """
+        self.fit(X, y)
+        return self.transform(X)
+
+    def get_internal_representation(self, X, y=None):
+        assert hasattr(self, "weights_")
+        return (self.transform(X) > 0).astype(int)

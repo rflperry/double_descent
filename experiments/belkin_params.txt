@@ -1,0 +1,44 @@
+1000 train samples
+RRF_PARAMS = {
+    'out_features': [
+        10, 20, 50, 100,
+        200, 300, 500, 700, 900, 1000, 1100, 1200, 1500, 2000, 4000
+        # 10, 15, 20, 25, 30, 35, 40, 45, 50, 100,
+        # 200, 300, 400, 450, 480, 500, 512, 524, 550, 600, 750, 1000
+    ],
+    'alpha': [0],
+    "max_iter": [500],
+    "solver": ['sgd'],
+    "batch_size": [32],
+    "learning_rate_init": [1e-2],
+    "momentum": [0.95],
+    "tol": [0],
+}
+
+
+10000 train samples
+FOREST_PARAMS = {
+    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    # "max_features": [1],
+    # "splitter": ['random'],
+    "bootstrap": [False],
+    "max_depth": [None] + list(range(1, 25)), # For n_estimators > 1, only run max_depth=None
+    "n_jobs": [-2],
+}
+
+40000 train samples
+NETWORK_PARAMS = {
+    "hidden_layer_dims":
+        [[4], [8], [12], [16], [24], [32], [38]]
+        + [[i] for i in range(40, 52, 2)]
+        + [[51]]
+        + [[i] for i in range(52, 64, 2)]
+        + [[64], [128], [256], [512], [1024]],
+    "n_epochs": [6000]
+    "learning_rate": [1e-2],
+    "batch_size": [32],
+    "verbose": [0],
+    "early_stop_thresh": [0],
+    "bias": [True],
+    "init_prior_model": [True],
+}

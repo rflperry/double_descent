@@ -250,7 +250,7 @@ def fast_evals(X, pad=True, is_kernel=False):
 
 
 def score_matrix_representation(
-    X, y=None, metric="l2", p=1, is_kernel=False, regions=False, prune_columns=False, is_evals=False
+    X, y=None, metric="l2", p=1, is_kernel=False, regions=False, prune_columns=False, is_evals=False, scale=False
 ):
     """
     Scores a matrix encoding.
@@ -287,6 +287,9 @@ def score_matrix_representation(
     is_evals : boolean (default=False)
         If True, then X is taken to be a vector of eigenvalues
 
+    scale : boolean (default=False)
+        If true, scales the eigenvalues by n_features
+
     Returns
     -------
     score : float
@@ -305,17 +308,23 @@ def score_matrix_representation(
 
     if metric in ['norm', 'entropy', 'h*']:
         if is_evals:
-            evals = X
+            evals = np.asarray(X)
         elif regions:
             _, evals = np.unique(X, axis=0, return_counts=True)
         else:
-            evals = fast_evals(X, pad=False, is_kernel=is_kernel)
+            evals = fast_evals(X, pad=True, is_kernel=is_kernel)
+
+        if scale:
+            evals /= X.shape[1]
+
         if metric == 'norm':
-            score = np.sum(evals ** p) ** (1 / p)
+            score = np.linalg.norm(evals, ord=p)
         elif metric == 'entropy':
-            evals = evals[evals > 0]
-            score = (evals * np.log(evals)).sum()
+            from scipy.stats import entropy
+            score = entropy(evals)
         elif metric == 'h*':
+            # egigenvalues of normalized gram matrix
+            evals = evals / n
             score = np.asarray([
                 i / n + np.sqrt(np.sum(evals[i:]) / n) for i in range(len(evals)+1)
             ])
@@ -325,8 +334,25 @@ def score_matrix_representation(
     elif metric == "row_means":
         score = np.sum(np.mean(X, axis=0) ** p) ** (1 / p)
     elif metric == "col_means":
-        score = np.sum(np.mean(X, axis=1) ** p) ** (1 / p)        
+        score = np.sum(np.mean(X, axis=1) ** p) ** (1 / p)
+    elif metric == 'mean_dot_product':
+        score = 0
+        for row in X:
+            score += np.mean(X @ row.T)
+    elif metric == 'mean_sim_entropy':
+        from scipy.stats import entropy
+        score = 0
+        for row in X:
+            sims = X @ row
+            # Possible for similarity to be entirely 0 vector.
+            score += entropy(sims) if sims.sum() > 0 else 0
+        score /= n
     else:
         raise ValueError(f'Metric {metric} is not valid')
 
     return score
+
+
+"""
+Metrics based on the affine function in regions
+"""
