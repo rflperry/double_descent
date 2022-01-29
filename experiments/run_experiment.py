@@ -39,26 +39,28 @@ from partition_decode.dn_utils import get_norm_irm
 Experiment Settings
 """
 
-N_TRAIN_SAMPLES = 1024
+N_TRAIN_SAMPLES = 1024*4
 N_TEST_SAMPLES = 8192
 
 DATA_PARAMS_DICT = {
     "xor": {
-        "n_train_samples": N_TRAIN_SAMPLES,  # [4096],
-        "n_test_samples": N_TEST_SAMPLES,
-        "recurse_level": 0,
-        "cov_scale": 1.0,
-        "onehot": True,
+        "n_train_samples": [N_TRAIN_SAMPLES],  # [4096],
+        "n_test_samples": [N_TEST_SAMPLES],
+        "recurse_level": [0],
+        "cov_scale": [1.0],
+        "onehot": [True],
+        "shuffle_label_frac": [None],
     },
     "spiral": {
         "n_train_samples": N_TRAIN_SAMPLES,  # [4096],
         "n_test_samples": N_TEST_SAMPLES,
     },
     "mnist": {
-        "n_train_samples": 4000,
-        "n_test_samples": 10000,
-        "save_path": "/mnt/ssd3/ronan/pytorch",
-        "onehot": True,
+        "n_train_samples": [4000],
+        "n_test_samples": [10000],
+        "save_path": ["/mnt/ssd3/ronan/pytorch"],
+        "onehot": [True],
+        "shuffle_label_frac": [None],
     },
 }
 
@@ -68,11 +70,11 @@ TREE_PARAMS = {
 }
 
 FOREST_PARAMS = {
-    "n_estimators": [2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
     # "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [None],# + list(range(1, 30)),
+    "max_depth": [None] + list(range(1, 25)),
     "n_jobs": [-2],
 }
 
@@ -97,15 +99,12 @@ RRF_PARAMS = {
 
 NETWORK_PARAMS = {
     "hidden_layer_dims": # [[4096]], # [3072], [1024], [2048]],
-        # [[4], [8], [12], [16], [24], [32], [38]]
-        # + [[i] for i in range(40, 52, 2)]
-        # + [[51]]
-        # + [[i] for i in range(52, 64, 2)]
-        # + [[64], [128], [256], [512]],
-        [
-            [512], [1024], [2048]# [4], [8], [12], [16], [24], [32], [64], [128], [256], [512]
-        ],
-    "n_epochs": [1000], # np.diff([0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
+        [[4], [8], [12], [16], [24], [32], [38]]
+        + [[i] for i in range(40, 52, 2)]
+        + [[51]]
+        + [[i] for i in range(52, 64, 2)]
+        + [[64], [128], [256], [512], [1024]],
+    "n_epochs": [2000], # np.diff([0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
     "learning_rate": [1e-2],
     "batch_size": [32],
     "verbose": [0],
@@ -155,7 +154,7 @@ Experiment run functions
 """
 
 
-def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, onehot=False):
+def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, onehot=False, shuffle_label_frac=None):
     if dataset == "xor":
         X, y = recursive_gaussian_parity(
             n_samples=n_samples,
@@ -175,6 +174,12 @@ def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, oneh
         new_y = np.zeros((y.shape[0], len(np.unique(y))))
         new_y[np.arange(new_y.shape[0]), y] = 1
         y = new_y
+
+    if shuffle_label_frac is not None:
+        idx = np.random.choice(y.shape[0], int(y.shape[0] * shuffle_label_frac),replace=False)
+        old_vals = y[idx]
+        np.random.shuffle(old_vals)
+        y[idx] = old_vals
 
     return X, y
 
@@ -429,17 +434,25 @@ def main(args):
         model_params_dict = NETWORK_PARAMS
         run_model = run_relu_regressor
 
+    # Create combinatiosn of data parameters
+    keys, values = zip(*DATA_PARAMS_DICT[args.dataset].items())
+    data_params_grid = [dict(zip(keys, v)) for v in itertools.product(*values)]
+
+    # Create combinations of model parameters
+    keys, values = zip(*model_params_dict.items())
+    model_params_grid = [dict(zip(keys, v)) for v in itertools.product(*values)]
+
     # Create folder to save results to
     if args.output_dir is None:
-        args.output_dir = f"results/{args.dataset}"
-
-    # Get parameters for the dataset
-    data_params = DATA_PARAMS_DICT[args.dataset]
+        if len(data_params_grid) > 1:
+            args.output_dir = f"varying_data_results/{args.dataset}"
+        else:
+            args.output_dir = f"varying_model_results/{args.dataset}"
 
     # Create results csv header
     header = (
         ["model", "rep",]
-        + list(data_params.keys())
+        + list(DATA_PARAMS_DICT[args.dataset].keys())
         + list(model_params_dict.keys())
         + [f"train_01_error", f"train_mse", f"test_01_error", f"test_mse",]
         + MODEL_METRICS["ALL"]
@@ -452,69 +465,69 @@ def main(args):
     if not args.append:
         f.write(",".join(header) + "\n")
         f.flush()
+        save_idx = 0
+    else:
+        save_idx = sum(1 for _ in open(Path(args.output_dir) / f"{args.dataset}_{args.model}_results.csv", 'r')) - 1
 
-    # Create combinatiosn of data parameters
-    # keys, values = zip(*DATA_PARAMS_DICT[args.dataset].items())
-    # data_params_grid = [dict(zip(keys, v)) for v in itertools.product(*values)]
 
-    # Create combinations of model parameters
-    keys, values = zip(*model_params_dict.items())
-    model_params_grid = [dict(zip(keys, v)) for v in itertools.product(*values)]
+    for data_params in data_params_grid:
+        # Load invariant test data
+        X_test, y_test = load_Xy_data(
+            dataset=args.dataset,
+            n_samples=data_params["n_test_samples"],
+            random_state=12345,
+            data_params=data_params,
+            train=False,
+            onehot=data_params['onehot'],
+            shuffle_label_frac=data_params['shuffle_label_frac'],
+        )
 
-    # Load invariant test data
-    X_test, y_test = load_Xy_data(
-        dataset=args.dataset,
-        n_samples=data_params["n_test_samples"],
-        random_state=12345,
-        data_params=data_params,
-        train=False,
-        onehot=data_params['onehot'],
-    )
+        # Iterate over repetitions
+        for rep in tqdm(range(args.n_reps)):
+            # for data_params in data_params_grid:
+            # Create data to test
+            if rep == 0 or not args.fix_train_data:
+                X_train, y_train = load_Xy_data(
+                    dataset=args.dataset,
+                    n_samples=data_params["n_train_samples"],
+                    random_state=0 if args.fix_train_data else rep,
+                    data_params=data_params,
+                    train=True,
+                    onehot=data_params['onehot'],
+                    shuffle_label_frac=data_params['shuffle_label_frac'],
+                )
+                min_max_scaler = MinMaxScaler()
+                X_train = min_max_scaler.fit_transform(X_train)
 
-    save_idx = 0
-    # Iterate over repetitions
-    for rep in tqdm(range(args.n_reps)):
-        # for data_params in data_params_grid:
-        # Create data to test
-        if rep == 0 or not args.fix_train_data:
-            X_train, y_train = load_Xy_data(
-                dataset=args.dataset,
-                n_samples=data_params["n_train_samples"],
-                random_state=0 if args.fix_train_data else rep,
-                data_params=data_params,
-                train=True,
-                onehot=data_params['onehot'],
-            )
-            min_max_scaler = MinMaxScaler()
-            X_train = min_max_scaler.fit_transform(X_train)
+            model = None
 
-        model = None
+            # Iterate over models
+            for model_params in model_params_grid:
+                if args.model == 'forest' and model_params['n_estimators'] > 1 and model_params['max_depth'] != None:
+                    continue
 
-        # Iterate over models
-        for model_params in model_params_grid:
+                save_path = None
+                if args.save_models:
+                    save_path = Path(args.output_dir) / "models" / f"{args.dataset}_{args.model}_model_{save_idx}.pkl"
+                    save_idx += 1
+                # Train and test model
+                model, y_train_pred, y_test_pred, model_metrics = run_model(
+                    X_train, y_train, min_max_scaler.transform(X_test), model_params, model, save_path
+                )            
 
-            save_path = None
-            if args.save_models:
-                save_path = Path(args.output_dir) / "models" / f"{args.dataset}_{args.model}_model_{save_idx}.pkl"
-                save_idx += 1
-            # Train and test model
-            model, y_train_pred, y_test_pred, model_metrics = run_model(
-                X_train, y_train, min_max_scaler.transform(X_test), model_params, model, save_path
-            )            
+                # Compute metrics
+                results = (
+                    [args.model, rep]
+                    + list(data_params.values())
+                    + clean_results(model_params.values())
+                    + get_y_metrics(y_train, y_train_pred)  # Train
+                    + get_y_metrics(y_test, y_test_pred)  # Test
+                    + model_metrics
+                )
 
-            # Compute metrics
-            results = (
-                [args.model, rep]
-                + list(data_params.values())
-                + clean_results(model_params.values())
-                + get_y_metrics(y_train, y_train_pred)  # Train
-                + get_y_metrics(y_test, y_test_pred)  # Test
-                + model_metrics
-            )
-
-            # Dynamically write results to csv
-            f.write(",".join(map(str, results)) + "\n")
-            f.flush()
+                # Dynamically write results to csv
+                f.write(",".join(map(str, results)) + "\n")
+                f.flush()
 
     print("Completed")
 
