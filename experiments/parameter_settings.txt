@@ -38,12 +38,12 @@ NETWORK_PARAMS = {
     "learning_rate": [1e-2],
     "batch_size": [32],
     "verbose": [0],
-    "early_stop_thresh": [0],
+    "early_stop_thresh": [None],
     "bias": [True],
     "init_prior_model": [True],
 }
 
-XOR Simulated Settings:
+XOR Dataset:
 N_TRAIN_SAMPLES = 1024*4
 N_TEST_SAMPLES = 8192
 cov_Scale = 1.0

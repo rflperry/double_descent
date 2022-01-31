@@ -1,0 +1,2 @@
+model,rep,n_train_samples,n_test_samples,save_path,hidden_layer_dims,n_epochs,learning_rate,batch_size,verbose,early_stop_thresh,bias,init_prior_model,train_01_error,train_mse,test_01_error,test_mse,IRM_L1,IRM_L2,n_regions,ACTS_L2,IRM_h*,ACTS_h*,entropy,rows_mean_L2,cols_mean_L1,cols_mean_L2,n_parameters,depth,width
+relu_classifier,0,4000,10000,/mnt/ssd3/ronan/pytorch,4,600,1e-05,128,0,0,True,True,0.9007499999999999,2.8464112,0.8968,2.8464077,1.0,1.0,2,3999.0001250312557,1,2,0.0,0.00025,0.25,0.25,3190,1,4

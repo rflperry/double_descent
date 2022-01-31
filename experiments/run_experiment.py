@@ -49,18 +49,18 @@ DATA_PARAMS_DICT = {
         "recurse_level": [0],
         "cov_scale": [1.0],
         "onehot": [True],
-        "shuffle_label_frac": [None],
+        "shuffle_label_frac": [None]
     },
     "spiral": {
         "n_train_samples": N_TRAIN_SAMPLES,  # [4096],
         "n_test_samples": N_TEST_SAMPLES,
     },
     "mnist": {
-        "n_train_samples": [4000],
+        "n_train_samples": [1000],
         "n_test_samples": [10000],
         "save_path": ["/mnt/ssd3/ronan/pytorch"],
         "onehot": [True],
-        "shuffle_label_frac": [None],
+        "shuffle_label_frac": np.linspace(0, 1, 11), # [None],
     },
 }
 
@@ -70,11 +70,11 @@ TREE_PARAMS = {
 }
 
 FOREST_PARAMS = {
-    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "n_estimators": [5], # [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
     # "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [None] + list(range(1, 25)),
+    "max_depth": [None], # list(range(1, 25)) + [None],
     "n_jobs": [-2],
 }
 
@@ -98,17 +98,17 @@ RRF_PARAMS = {
 }
 
 NETWORK_PARAMS = {
-    "hidden_layer_dims": # [[4096]], # [3072], [1024], [2048]],
-        [[4], [8], [12], [16], [24], [32], [38]]
-        + [[i] for i in range(40, 52, 2)]
-        + [[51]]
-        + [[i] for i in range(52, 64, 2)]
-        + [[64], [128], [256], [512], [1024]],
+    "hidden_layer_dims": [[256]], # [[4096]], # [3072], [1024], [2048]],
+        # [[4], [8], [12], [16], [24], [32], [38]]
+        # + [[i] for i in range(40, 52, 2)]
+        # + [[51]]
+        # + [[i] for i in range(52, 64, 2)]
+        # + [[64], [128], [256], [512], [1024]],
     "n_epochs": [2000], # np.diff([0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
     "learning_rate": [1e-2],
     "batch_size": [32],
     "verbose": [0],
-    "early_stop_thresh": [0],
+    "early_stop_thresh": [None],
     "bias": [True],
     "init_prior_model": [True],
 }
@@ -130,7 +130,7 @@ MODEL_METRICS = {
         "IRM_mean_sim_entropy",
     ],
     "tree": ["n_leaves"],
-    "forest": ["n_total_leaves"],
+    "forest": ["n_total_leaves", "mean_polytope_norm"],
     "knn": [],
     "relu_classifier": [
         # 'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
@@ -176,6 +176,7 @@ def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, oneh
         y = new_y
 
     if shuffle_label_frac is not None:
+        np.random.seed(random_state)
         idx = np.random.choice(y.shape[0], int(y.shape[0] * shuffle_label_frac),replace=False)
         old_vals = y[idx]
         np.random.shuffle(old_vals)
@@ -215,6 +216,15 @@ def run_forest(X_train, y_train, X_test, model_params, model=None, save_path=Non
 
     model_metrics = get_eigenval_metrics(irm, model.n_estimators)
     model_metrics += [np.sum([tree.get_n_leaves() for tree in model.estimators_])]
+
+    norm = 0
+    weights = model.predict(X_train) # leaf predictions, constants
+    polytope_assignments = np.unique(irm, axis=0, return_inverse=True)[1]
+    for polytope in np.unique(polytope_assignments):
+        # get norm of output function, just beta term here
+        idx = np.where(polytope_assignments == polytope)[0]
+        norm += len(idx) * np.linalg.norm(weights[idx[0]])
+    model_metrics += [norm / irm.shape[0]]
 
     return model, y_train_pred, y_test_pred, model_metrics
 
