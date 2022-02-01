@@ -7,7 +7,7 @@ import torch
 
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.metrics import zero_one_loss, mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
@@ -39,7 +39,7 @@ from partition_decode.dn_utils import get_norm_irm
 Experiment Settings
 """
 
-N_TRAIN_SAMPLES = 1024*4
+N_TRAIN_SAMPLES = 100
 N_TEST_SAMPLES = 8192
 
 DATA_PARAMS_DICT = {
@@ -60,7 +60,7 @@ DATA_PARAMS_DICT = {
         "n_test_samples": [10000],
         "save_path": ["/mnt/ssd3/ronan/pytorch"],
         "onehot": [True],
-        "shuffle_label_frac": np.linspace(0, 1, 11), # [None],
+        "shuffle_label_frac": [None], # np.linspace(0, 1, 11), # [None],
     },
 }
 
@@ -80,6 +80,7 @@ FOREST_PARAMS = {
 
 KNN_PARAMS = {
     "n_neighbors": list(range(1, N_TRAIN_SAMPLES, 2)),
+    "weights": ['uniform', 'distance'],
     "n_jobs": [-2],
 }
 
@@ -230,10 +231,10 @@ def run_forest(X_train, y_train, X_test, model_params, model=None, save_path=Non
 
 
 def run_knn(X_train, y_train, X_test, model_params, model=None, save_path=None):
-    model = KNeighborsClassifier(**model_params)
+    model = KNeighborsRegressor(**model_params)
     model.fit(X_train, y_train)
-    y_train_pred = model.predict_proba(X_train)
-    y_test_pred = model.predict_proba(X_test)
+    y_train_pred = model.predict(X_train)
+    y_test_pred = model.predict(X_test)
 
     irm = model.kneighbors_graph(X_train).toarray()
     model_metrics = get_eigenval_metrics(irm, model.n_neighbors)
