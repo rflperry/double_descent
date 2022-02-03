@@ -95,6 +95,43 @@ class ReLuNet(BaseEstimator):
 
         return np.vstack(irm)
 
+    def get_affine_functions(self):
+        """
+        Constructs the composition of all weights and biases irrespective of
+        any nonlinearities. Currently only implemented for a 1 hidden layer
+        network.
+
+        Returns
+        -------
+        W : weight matrix, shape (h, d)
+        b : bias pre ReLUs, shape (h,)
+        b_ult : bias post ReLUs, shape (k,)
+
+        Notes
+        -----
+        Given the internal representation matrix M, samples X, the ith targets
+        `y_i = np.diag(M @ (b_i + W @ X.T) + b_ult_i)`. Effectively
+        M encodes the nonlinearities per sample and `np.diag` extracts
+        each samples output `y_i`.
+        """
+
+        W = []
+        b = []
+        b_ult = []
+
+        with torch.no_grad():
+            l1 = self.model_[0]
+            l2 = self.model_[2]
+            for W_out, b_out in zip(l2.weight.numpy(), l2.bias.numpy()):
+                W.append(np.diag(W_out) @ l1.weight.numpy())
+                b.append(np.diag(W_out) @ l1.bias.numpy())
+                b_ult.append(b_out)
+                
+        W = np.asarray(W)
+        b = np.asarray(b)
+        b_ult = np.asarray(b_ult)
+        return W, b, b_ult
+
 
 class ReluNetClassifier(ReLuNet, ClassifierMixin):
     def _train_model(self, X, y):

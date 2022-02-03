@@ -39,7 +39,7 @@ from partition_decode.dn_utils import get_norm_irm
 Experiment Settings
 """
 
-N_TRAIN_SAMPLES = 100
+N_TRAIN_SAMPLES = 4096
 N_TEST_SAMPLES = 8192
 
 DATA_PARAMS_DICT = {
@@ -60,7 +60,7 @@ DATA_PARAMS_DICT = {
         "n_test_samples": [10000],
         "save_path": ["/mnt/ssd3/ronan/pytorch"],
         "onehot": [True],
-        "shuffle_label_frac": [None], # np.linspace(0, 1, 11), # [None],
+        "shuffle_label_frac": np.linspace(0, 1, 11), # [None],
     },
 }
 
@@ -70,7 +70,7 @@ TREE_PARAMS = {
 }
 
 FOREST_PARAMS = {
-    "n_estimators": [5], # [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "n_estimators": [5], #[1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
     # "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
@@ -131,7 +131,12 @@ MODEL_METRICS = {
         "IRM_mean_sim_entropy",
     ],
     "tree": ["n_leaves"],
-    "forest": ["n_total_leaves", "mean_polytope_norm"],
+    "forest": [
+        "n_total_leaves",
+        "IRM_scaled_L0",
+        "IRM_scaled_L1",
+        "IRM_scaled_L2",
+        "mean_polytope_norm"],
     "knn": [],
     "relu_classifier": [
         # 'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
@@ -211,12 +216,17 @@ def run_forest(X_train, y_train, X_test, model_params, model=None, save_path=Non
     y_train_pred = model.predict(X_train)
     y_test_pred = model.predict(X_test)
 
-    irm = get_forest_irm(model, X_train)
+    irm = get_forest_irm(model, X_train, scale=False)
     # Alternative considered, based on posteriors for better computation of affine similarity
     # irm = model.predict_proba(X_train)
 
     model_metrics = get_eigenval_metrics(irm, model.n_estimators)
     model_metrics += [np.sum([tree.get_n_leaves() for tree in model.estimators_])]
+
+    irm = get_forest_irm(model, X_train, scale=True)
+    for p in [0, 1, 2]:
+        evals = np.linalg.svd(irm, compute_uv=False)**2
+        model_metrics += [np.linalg.norm(evals, ord=p)]
 
     norm = 0
     weights = model.predict(X_train) # leaf predictions, constants

@@ -167,18 +167,23 @@ Eigenvalues utilities
 """
 
 
-def get_tree_irm(tree, X):
+def get_tree_irm(tree, X, scale=False):
     n = X.shape[0]
     leaf_indices = tree.apply(X)
     irm = np.zeros((n, len(set(leaf_indices))))
     irm[np.arange(n), np.unique(leaf_indices, return_inverse=True)[1]] = 1
-    
+    if scale: # weighting by size of leaf, proper weights
+        irm /= np.sqrt(irm.sum(0, keepdims=True))
+
     return irm
 
 
-def get_forest_irm(forest, X):
-    tree_irms = [get_tree_irm(tree, X) for tree in forest.estimators_]
-    return np.hstack(tree_irms)
+def get_forest_irm(forest, X, scale=False):
+    tree_irms = [get_tree_irm(tree, X, scale=scale) for tree in forest.estimators_]
+    if scale:
+        return np.hstack(tree_irms) / np.sqrt(len(tree_irms))
+    else:
+        return np.hstack(tree_irms)
 
 
 def get_tree_evals(model, X):
