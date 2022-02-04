@@ -24,6 +24,7 @@ from partition_decode.df_utils import (
     get_forest_evals,
     get_forest_irm,
     get_tree_irm,
+    get_forest_weights,
 )
 from partition_decode.models import ReluNetClassifier, ReluNetRegressor
 from partition_decode.metrics import (
@@ -39,7 +40,7 @@ from partition_decode.dn_utils import get_norm_irm
 Experiment Settings
 """
 
-N_TRAIN_SAMPLES = 4096
+N_TRAIN_SAMPLES = 1024# *4
 N_TEST_SAMPLES = 8192
 
 DATA_PARAMS_DICT = {
@@ -56,11 +57,11 @@ DATA_PARAMS_DICT = {
         "n_test_samples": N_TEST_SAMPLES,
     },
     "mnist": {
-        "n_train_samples": [1000],
+        "n_train_samples": [10000],
         "n_test_samples": [10000],
         "save_path": ["/mnt/ssd3/ronan/pytorch"],
         "onehot": [True],
-        "shuffle_label_frac": np.linspace(0, 1, 11), # [None],
+        "shuffle_label_frac": [None], # np.linspace(0, 1, 11), # 
     },
 }
 
@@ -70,11 +71,11 @@ TREE_PARAMS = {
 }
 
 FOREST_PARAMS = {
-    "n_estimators": [5], #[1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
     # "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [None], # list(range(1, 25)) + [None],
+    "max_depth": list(range(1, 25)) + [None], # [None], # 
     "n_jobs": [-2],
 }
 
@@ -136,7 +137,8 @@ MODEL_METRICS = {
         "IRM_scaled_L0",
         "IRM_scaled_L1",
         "IRM_scaled_L2",
-        "mean_polytope_norm"],
+        "mean_affine_mat_norm",
+        ],
     "knn": [],
     "relu_classifier": [
         # 'irm_l2_pen', 'activated_regions_pen', 'regions_l2_pen',
@@ -151,6 +153,7 @@ MODEL_METRICS = {
         "depth",
         "width",
         "weights_L2",
+        "mean_affine_mat_norm",
     ],
     "rrf": []
 }
@@ -216,26 +219,56 @@ def run_forest(X_train, y_train, X_test, model_params, model=None, save_path=Non
     y_train_pred = model.predict(X_train)
     y_test_pred = model.predict(X_test)
 
-    irm = get_forest_irm(model, X_train, scale=False)
+    irm = get_forest_irm(model, X_train, scale=True)
+    np.testing.assert_array_almost_equal(
+        irm @ (irm.T @ y_train),
+        y_train_pred
+    )
     # Alternative considered, based on posteriors for better computation of affine similarity
     # irm = model.predict_proba(X_train)
 
-    model_metrics = get_eigenval_metrics(irm, model.n_estimators)
+    model_metrics = get_eigenval_metrics(np.ceil(irm), model.n_estimators)
     model_metrics += [np.sum([tree.get_n_leaves() for tree in model.estimators_])]
 
-    irm = get_forest_irm(model, X_train, scale=True)
+    # Scaled irm norms, i.e. hat matrix
     for p in [0, 1, 2]:
         evals = np.linalg.svd(irm, compute_uv=False)**2
         model_metrics += [np.linalg.norm(evals, ord=p)]
 
-    norm = 0
-    weights = model.predict(X_train) # leaf predictions, constants
-    polytope_assignments = np.unique(irm, axis=0, return_inverse=True)[1]
-    for polytope in np.unique(polytope_assignments):
-        # get norm of output function, just beta term here
-        idx = np.where(polytope_assignments == polytope)[0]
-        norm += len(idx) * np.linalg.norm(weights[idx[0]])
-    model_metrics += [norm / irm.shape[0]]
+    # Polytope function norm
+    # norm = 0
+    # weights = model.predict(X_train) # leaf predictions, constants
+    # polytope_assignments = np.unique(irm, axis=0, return_inverse=True)[1]
+    # for polytope in np.unique(polytope_assignments):
+    #     # get norm of output function, just beta term here
+    #     idx = np.where(polytope_assignments == polytope)[0]
+    #     norm += len(idx) * np.linalg.norm(weights[idx[0]])
+    # model_metrics += [norm / irm.shape[0]]
+
+    # IMORTANT: expanded=False
+    # W_forest = get_forest_weights(model, X_train, expanded=False)
+    # # iterate over target MW matrices and take the mean norm.
+    # MW_norm = np.mean([
+    #     (np.linalg.norm(np.ceil(irm) @ W, ord=2) / np.sqrt(irm.shape[0]))
+    #     for W in W_forest
+    # ])
+    # np.testing.assert_array_almost_equal(
+    #     (np.ceil(irm) @ W_forest[0]).sum(1),
+    #     y_train_pred[:, 0]
+    # )
+    # model_metrics += [MW_norm]
+
+    W_forest = get_forest_weights(model, X_train, expanded=True)
+    # iterate over target MW matrices and take the mean norm.
+    MW_norm = np.mean([
+        (np.linalg.norm(np.ceil(irm) @ W, ord=2) / np.sqrt(irm.shape[0]))
+        for W in W_forest
+    ])
+    np.testing.assert_array_almost_equal(
+        (np.ceil(irm) @ W_forest[0]).sum(1),
+        y_train_pred[:, 0]
+    )
+    model_metrics += [MW_norm]
 
     return model, y_train_pred, y_test_pred, model_metrics
 
@@ -355,6 +388,19 @@ def run_relu_regressor(X_train, y_train, X_test, model_params, prior_model=None,
         model.hidden_layer_dims[0],
         np.linalg.norm(model.model_[0].weight.detach().numpy())
     ]
+
+    W_network, b, _ = model.get_affine_functions()
+    W_network = np.concatenate((b.reshape(*b.shape, 1), W_network), axis=-1)
+    # scaled forbenius norm, averaged over outputs
+    MW_norm = np.mean([
+        np.linalg.norm(irm @ W, ord=2) / np.sqrt(irm.shape[0])
+        for W in W_network
+    ])
+    np.testing.assert_array_almost_equal(
+        (irm @ W_network[0]).sum(1),
+        y_train_pred[:, 0]
+    )
+    model_metrics += [MW_norm]
 
     if save_path is not None:
         torch.save(model.model_.state_dict(), save_path)

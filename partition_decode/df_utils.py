@@ -230,6 +230,77 @@ def get_forest_evals(model, X):
     return irm_evals, act_evals
 
 
+def get_tree_weights(tree, X):
+    """
+    Computes the leaf weights for a regression tree.
+
+    Parameters
+    ----------
+    tree : sklearn.tree.DecisionTreeRegressor
+        Fitted tree with l leaves and k targets
+    X : np.ndarray, shape (n, d)
+        Training data
+    
+    Returns
+    -------
+    weights : np.ndarray, shape (k, l)
+    """
+    n = X.shape[0]
+    leaves = tree.apply(X).reshape(n, -1) # n, 1 w/ L unique
+    y_hat = tree.predict(X) # n, k
+    _, indices = np.unique(leaves, axis=0, return_index=True)
+    weights = np.asarray([
+        y_hat[indices, i]
+        for i in range(y_hat.shape[1])
+    ])
+    return weights
+    
+
+def get_forest_weights(model, X, expanded=True):
+    """
+    Computes the leaf weights for a regression tree. These
+    are the tree weights normalized by the number of trees.
+
+    Parameters
+    ----------
+    tree : sklearn.ensemble.RandomForestRegressor
+        Fitted tree with l total leaves, k targets, and t trees
+    X : np.ndarray, shape (n, d)
+        Training data
+    expanded : bool, default=False
+        If True, returns a 3D block diagonal tensor with
+        weights from each tree separated along the final axis.
+    Returns
+    -------
+    weights : np.ndarray
+        If expanded=True, shape (k, l, t). Else shape (k, l)
+    
+    Note
+    ----
+    expanded=False is not informative at max depth as each sample
+    receives the same overfitted prediction. Thus the weights
+    are constant.
+    """
+    tree_weights = [
+        get_tree_weights(tree, X)
+        for tree in model.estimators_
+    ]
+    
+    if expanded:
+        shapes = [i.shape for i in tree_weights]
+        out = np.zeros([shapes[0][0], sum(s[1] for s in shapes), len(shapes)])
+        
+        r = 0
+        for i, (_, rr) in enumerate(shapes):
+            out[:, r:r + rr, i] = tree_weights[i]
+            r += rr
+    else:
+        out = np.concatenate(tree_weights, axis=-1)
+        out = out.reshape(*out.shape, 1)
+    
+    return out / len(tree_weights)
+
+
 """
   Example to run the `Deep RF` vs `Shallow RF` experiments
   and plot the figure.
