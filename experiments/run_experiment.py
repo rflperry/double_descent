@@ -57,7 +57,7 @@ DATA_PARAMS_DICT = {
         "n_test_samples": N_TEST_SAMPLES,
     },
     "mnist": {
-        "n_train_samples": [10000],
+        "n_train_samples": [4000],
         "n_test_samples": [10000],
         "save_path": ["/mnt/ssd3/ronan/pytorch"],
         "onehot": [True],
@@ -100,12 +100,12 @@ RRF_PARAMS = {
 }
 
 NETWORK_PARAMS = {
-    "hidden_layer_dims": [[256]], # [[4096]], # [3072], [1024], [2048]],
-        # [[4], [8], [12], [16], [24], [32], [38]]
-        # + [[i] for i in range(40, 52, 2)]
-        # + [[51]]
-        # + [[i] for i in range(52, 64, 2)]
-        # + [[64], [128], [256], [512], [1024]],
+    "hidden_layer_dims": # [[256]], # [[4096]], # [3072], [1024], [2048]],
+        [[4], [8], [12], [16], [24], [32], [38]]
+        + [[i] for i in range(40, 52, 2)]
+        + [[51]]
+        + [[i] for i in range(52, 64, 2)]
+        + [[64], [128], [256], [512], [1024]],
     "n_epochs": [2000], # np.diff([0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
     "learning_rate": [1e-2],
     "batch_size": [32],
@@ -389,16 +389,21 @@ def run_relu_regressor(X_train, y_train, X_test, model_params, prior_model=None,
         np.linalg.norm(model.model_[0].weight.detach().numpy())
     ]
 
-    W_network, b, _ = model.get_affine_functions()
+    W_network, b, b_ult = model.get_affine_functions()
     W_network = np.concatenate((b.reshape(*b.shape, 1), W_network), axis=-1)
     # scaled forbenius norm, averaged over outputs
     MW_norm = np.mean([
         np.linalg.norm(irm @ W, ord=2) / np.sqrt(irm.shape[0])
         for W in W_network
     ])
+
     np.testing.assert_array_almost_equal(
-        (irm @ W_network[0]).sum(1),
-        y_train_pred[:, 0]
+        np.diag(
+            irm @ W_network[0] @ np.concatenate((
+                np.ones((X_train.shape[0], 1)), X_train), axis=-1
+            ).T  + b_ult[0]
+        ),
+        y_train_pred[:, 0],
     )
     model_metrics += [MW_norm]
 
