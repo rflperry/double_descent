@@ -71,11 +71,11 @@ TREE_PARAMS = {
 }
 
 FOREST_PARAMS = {
-    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "n_estimators": [5], # [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
     # "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": list(range(1, 25)) + [None], # [None], # 
+    "max_depth": [None], # list(range(1, 25)) + [None], # 
     "n_jobs": [-2],
 }
 
@@ -101,12 +101,11 @@ RRF_PARAMS = {
 
 NETWORK_PARAMS = {
     "hidden_layer_dims": # [[256]], # [[4096]], # [3072], [1024], [2048]],
-        [[4], [8], [12], [16], [24], [32], [38]]
-        + [[i] for i in range(40, 52, 2)]
-        + [[51]]
-        + [[i] for i in range(52, 64, 2)]
+        [[4], [8], [12], [16], [24], [32]]
+        + [[38], [42], [46], [50]]
+        + [[51]] # + [[i] for i in range(52, 64, 2)]
         + [[64], [128], [256], [512], [1024]],
-    "n_epochs": [2000], # np.diff([0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
+    "n_epochs": [6000], # np.diff([0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
     "learning_rate": [1e-2],
     "batch_size": [32],
     "verbose": [0],
@@ -185,7 +184,7 @@ def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, oneh
         y = new_y
 
     if shuffle_label_frac is not None:
-        np.random.seed(random_state)
+        # np.random.seed(random_state)
         idx = np.random.choice(y.shape[0], int(y.shape[0] * shuffle_label_frac),replace=False)
         old_vals = y[idx]
         np.random.shuffle(old_vals)
@@ -543,6 +542,7 @@ def main(args):
 
 
     for data_params in data_params_grid:
+        print('Data params: ' + str(data_params))
         # Load invariant test data
         X_test, y_test = load_Xy_data(
             dataset=args.dataset,
