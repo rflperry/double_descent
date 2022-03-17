@@ -7,6 +7,7 @@ import torch
 
 import numpy as np
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LinearRegression
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.metrics import zero_one_loss, mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
@@ -100,12 +101,12 @@ RRF_PARAMS = {
 }
 
 NETWORK_PARAMS = {
-    "hidden_layer_dims": # [[256]], # [[4096]], # [3072], [1024], [2048]],
+    "hidden_layer_dims": #[[256]], # [[4096]], # [3072], [1024], [2048]],
         [[4], [8], [12], [16], [24], [32]]
         + [[38], [42], [46], [50]]
         + [[51]] # + [[i] for i in range(52, 64, 2)]
         + [[64], [128], [256], [512], [1024]],
-    "n_epochs": [6000], # np.diff([0, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
+    "n_epochs": np.diff([1, 10, 50, 100, 200, 500, 1000, 2000, 3000, 6000], prepend=0),  # [0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024],# 2048],
     "learning_rate": [1e-2],
     "batch_size": [32],
     "verbose": [0],
@@ -151,8 +152,12 @@ MODEL_METRICS = {
         "n_parameters",
         "depth",
         "width",
+        "total_epochs",
         "weights_L2",
         "mean_affine_mat_norm",
+        "kernel_trace",
+        "head_norm",
+        "OLS_norm",
     ],
     "rrf": []
 }
@@ -379,13 +384,26 @@ def run_relu_regressor(X_train, y_train, X_test, model_params, prior_model=None,
     y_test_pred = model.predict(X_test)
 
     irm = model.get_internal_representation(X_train, penultimate=False)
+    kernel_rep = model.get_penultimate_representation(X_train)
+    kernel_rep /= kernel_rep.shape[1]
+
+    linreg = LinearRegression().fit(kernel_rep, y_train)
+
+    total_epochs = model_params["n_epochs"]
+    if prior_model is not None and prior_model.hidden_layer_dims == model_params["hidden_layer_dims"]:
+        total_epochs += prior_model._total_epochs
+    model._total_epochs = total_epochs
 
     model_metrics = get_eigenval_metrics(irm, irm.shape[1])
     model_metrics += [
         model.n_parameters_,
         len(model.hidden_layer_dims),
         model.hidden_layer_dims[0],
-        np.linalg.norm(model.model_[0].weight.detach().numpy())
+        total_epochs,
+        np.linalg.norm(model.model_[0].weight.detach().numpy()),
+        np.sum(np.linalg.svd(kernel_rep, compute_uv=False)**2),
+        np.mean(np.linalg.norm(model.model_[-1].weight.detach().numpy(), axis=1)),
+        np.mean(np.linalg.norm(linreg.coef_, axis=1))
     ]
 
     W_network, b, b_ult = model.get_affine_functions()

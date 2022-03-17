@@ -95,6 +95,24 @@ class ReLuNet(BaseEstimator):
 
         return np.vstack(irm)
 
+    def get_penultimate_representation(self, X):
+        if self.history_ is None:
+            raise RuntimeError("Classifier has not been fit")
+
+        split_size = math.ceil(len(X) / self.batch_size)
+
+        rep = []
+        with torch.no_grad():
+            for batch in np.array_split(X, split_size):
+                x_pred = Variable(torch.from_numpy(batch).float())
+                for module in self.model_[:-1]:
+                # for module in next(self.model_.modules()):
+                    x_pred = module(x_pred)
+                rep.append(x_pred)
+
+        return np.vstack(rep)
+
+
     def get_affine_functions(self):
         """
         Constructs the composition of all weights and biases irrespective of
@@ -290,7 +308,7 @@ class ReluNetRegressor(ReLuNet, RegressorMixin):
         optimizer = torch.optim.SGD(
             self.model_.parameters(), lr=self.learning_rate, momentum=0.95
         )
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=self.n_epochs // 12, gamma=0.1)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=np.max((self.n_epochs // 12, 5)), gamma=0.1)
 
         self.history_ = {"MSELoss": [], "mse": []}
 
