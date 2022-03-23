@@ -43,7 +43,7 @@ Experiment Settings
 """
 
 N_TRAIN_SAMPLES = 1000
-N_TEST_SAMPLES = 8192 // 4
+N_TEST_SAMPLES = 8192
 
 DATA_PARAMS_DICT = {
     "xor": {
@@ -76,12 +76,21 @@ DATA_PARAMS_DICT = {
     },
 }
 
-FOREST_PARAMS = {
-    "n_estimators": [5], # [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
-    # "max_features": [1],
+DEPTH_FOREST_PARAMS = {
+    "n_estimators": [3], # [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [None], # list(range(1, 25)) + [None], # 
+    "max_depth": list(range(1, 30)), # 
+    "n_jobs": [-2],
+}
+
+SHALLOW_FOREST_PARAMS = {
+    "n_estimators": [1],#, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "max_features": [1],
+    # "splitter": ['random'],
+    "bootstrap": [False],
+    "max_depth": list(range(1, 25)), # [25], # 
     "n_jobs": [-2],
 }
 
@@ -147,49 +156,28 @@ MODEL_METRICS = {
         "ACTS_L2",
         "IRM_entropy",
     ],
-    "forest": [
+    "deep_forest": [
         "n_total_leaves",
         ],
-    "wide_relu": [
-        "PEN_IRM_L0",
-        "PEN_IRM_L1",
-        "PEN_IRM_L2",
-        "PEN_n_regions",
-        "PEN_ACTS_L2",
-        "PEN_IRM_entropy",
-        "n_parameters",
-        "depth",
-        "width",
-        "kernel_trace",
-        "head_norm",
-    ],
-    "deep_relu": [
-        "PEN_IRM_L0",
-        "PEN_IRM_L1",
-        "PEN_IRM_L2",
-        "PEN_n_regions",
-        "PEN_ACTS_L2",
-        "PEN_IRM_entropy",
-        "n_parameters",
-        "depth",
-        "width",
-        "kernel_trace",
-        "head_norm",
-    ],
-    "relu": [
-        "PEN_IRM_L0",
-        "PEN_IRM_L1",
-        "PEN_IRM_L2",
-        "PEN_n_regions",
-        "PEN_ACTS_L2",
-        "PEN_IRM_entropy",
-        "n_parameters",
-        "depth",
-        "width",
-        "kernel_trace",
-        "head_norm",
-    ],
+    "shallow_forest": [
+        "n_total_leaves",
+        ],
 }
+
+for key in ['wide_relu', 'deep_relu', 'relu']:
+    MODEL_METRICS[key] = [
+        "PEN_IRM_L0",
+        "PEN_IRM_L1",
+        "PEN_IRM_L2",
+        "PEN_n_regions",
+        "PEN_ACTS_L2",
+        "PEN_IRM_entropy",
+        "n_parameters",
+        "depth",
+        "width",
+        "kernel_trace",
+        "head_norm",
+    ]
 
 """
 Experiment run functions
@@ -373,8 +361,11 @@ def main(args):
     if args.model == "tree":
         model_params_dict = TREE_PARAMS
         run_model = run_tree
-    elif args.model == "forest":
-        model_params_dict = FOREST_PARAMS
+    elif args.model == "shallow_forest":
+        model_params_dict = SHALLOW_FOREST_PARAMS
+        run_model = run_forest
+    elif args.model == "deep_forest":
+        model_params_dict = DEPTH_FOREST_PARAMS
         run_model = run_forest
     elif args.model == "knn":
         model_params_dict = KNN_PARAMS
@@ -495,7 +486,7 @@ if __name__ == "__main__":
     parser = ArgumentParser(description="Runs experiment")
 
     parser.add_argument(
-        "--model", choices=["tree", "forest", "knn", "rrf", "wide_relu", "deep_relu", 'relu'], help="Experiment to run"
+        "--model", choices=["tree", "deep_forest", "shallow_forest", "knn", "rrf", "wide_relu", "deep_relu", 'relu'], help="Experiment to run"
     )
     parser.add_argument(
         "--dataset", choices=["xor", "spiral", "mnist", "trunk"], help="Experiment to run"
