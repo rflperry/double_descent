@@ -16,6 +16,8 @@ def generate_gaussian_parity(
     cov_scale=1,
     angle_params=None,
     random_state=None,
+    noise_dims=0,
+    noise_std=1,
 ):
     """
     Generate 2-dimensional Gaussian XOR distribution, a mixture of four Gaussian belonging to two classes.
@@ -77,6 +79,9 @@ def generate_gaussian_parity(
         angle_params * np.pi / 180
     )
 
+    X_noise = np.random.normal(0, 1, (n_samples, noise_dims))
+    X = np.hstack((X, X_noise))
+
     return X, Y.astype(int)
 
 
@@ -87,6 +92,7 @@ def recursive_gaussian_parity(
     recurse_level=1,
     angle_params=None,
     random_state=None,
+    noise_dims=0,
 ):
     """
     Generate 2-dimensional distribution akin to Gaussian XOR but two adjacent
@@ -127,6 +133,7 @@ def recursive_gaussian_parity(
         cov_scale=cov_scale,
         angle_params=angle_params,
         random_state=random_state,
+        noise_dims=noise_dims,
     )
     if recurse_level == 0:
         return X, y
@@ -138,6 +145,7 @@ def recursive_gaussian_parity(
         cov_scale=cov_scale,
         angle_params=angle_params,
         random_state=random_state,
+        noise_dims=noise_dims,
     )
 
     # Recurse impute
@@ -379,3 +387,19 @@ def load_mnist(
     np.random.shuffle(idx)
 
     return X[idx], y[idx]
+
+
+def samples_trunk(n_samples, dims=10, random_state=None):
+    n = n_samples
+    d = dims
+    np.random.seed(random_state)
+    n1 = np.random.binomial(n, 0.5)
+    n2 = n - n1
+    mu = 1 / np.sqrt(np.arange(1, d+1))
+
+    X = np.vstack((
+        np.random.normal(mu, 1, (n1, d)),
+        np.random.normal(-mu, 1,  (n2, d))
+    ))
+    
+    return X, np.asarray([1]*n1 + [0]*n2)

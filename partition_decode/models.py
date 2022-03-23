@@ -68,7 +68,7 @@ class ReLuNet(BaseEstimator):
     def n_parameters_(self):
         return sum(p.numel() for p in self.model_.parameters())
 
-    def get_internal_representation(self, X, penultimate=False):
+    def get_internal_representation(self, X, penultimate=False, binary=True):
         """
         Returns the internal reprensetation matrix, encoding which samples
         activate which ReLUs. If penultimate=True, only returns the matrix
@@ -87,7 +87,10 @@ class ReLuNet(BaseEstimator):
                 for module in next(self.model_.modules()):
                     x_pred = module(x_pred)
                     if type(module) == torch.nn.modules.activation.ReLU:
-                        batch_irm.append((x_pred.numpy() > 0).astype(int))
+                        if binary:
+                            batch_irm.append((x_pred.numpy() > 0).astype(int))
+                        else:
+                            batch_irm.append(x_pred.numpy())
                 if penultimate:
                     irm.append(batch_irm[-1])
                 else:
@@ -95,22 +98,22 @@ class ReLuNet(BaseEstimator):
 
         return np.vstack(irm)
 
-    def get_penultimate_representation(self, X):
-        if self.history_ is None:
-            raise RuntimeError("Classifier has not been fit")
+    # def get_penultimate_representation(self, X):
+    #     if self.history_ is None:
+    #         raise RuntimeError("Classifier has not been fit")
 
-        split_size = math.ceil(len(X) / self.batch_size)
+    #     split_size = math.ceil(len(X) / self.batch_size)
 
-        rep = []
-        with torch.no_grad():
-            for batch in np.array_split(X, split_size):
-                x_pred = Variable(torch.from_numpy(batch).float())
-                for module in self.model_[:-1]:
-                # for module in next(self.model_.modules()):
-                    x_pred = module(x_pred)
-                rep.append(x_pred)
+    #     rep = []
+    #     with torch.no_grad():
+    #         for batch in np.array_split(X, split_size):
+    #             x_pred = Variable(torch.from_numpy(batch).float())
+    #             for module in self.model_[:-1]:
+    #             # for module in next(self.model_.modules()):
+    #                 x_pred = module(x_pred)
+    #             rep.append(x_pred)
 
-        return np.vstack(rep)
+    #     return np.vstack(rep)
 
 
     def get_affine_functions(self):
@@ -164,13 +167,13 @@ class ReluNetClassifier(ReLuNet, ClassifierMixin):
             train, batch_size=self.batch_size, shuffle=self.shuffle
         )
 
-        loss_fn = torch.nn.CrossEntropyLoss()
+        loss_fn = torch.nn.BCEWithLogitsLoss() # CrossEntropyLoss()
         self.model_.train()
-        # optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.learning_rate)
-        optimizer = torch.optim.SGD(
-            self.model_.parameters(), lr=self.learning_rate, momentum=0.95
-        )
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
+        optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.learning_rate)
+        # optimizer = torch.optim.SGD(
+        #     self.model_.parameters(), lr=self.learning_rate, momentum=0.95
+        # )
+        # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)
 
         self.history_ = {"CrossEntropyLoss": [], "01_error": []}
 
@@ -186,14 +189,14 @@ class ReluNetClassifier(ReLuNet, ClassifierMixin):
 
                 loss = loss_fn(
                     y_pred,
-                    Variable(target.cuda().long() if self.gpu_ else target.long()),
+                    Variable(target.cuda() if self.gpu_ else target),
                 )
 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
 
-            scheduler.step()
+            # scheduler.step()
 
             y_labels = (target.cpu() if self.gpu_ else target).numpy()
             y_pred_results = (
@@ -202,12 +205,12 @@ class ReluNetClassifier(ReLuNet, ClassifierMixin):
                 .argmax(1)
             )
 
-            error = zero_one_loss(y_pred_results, y_labels)
-            total_error = zero_one_loss(self.predict(X), y)
+            error = zero_one_loss(y_pred_results, y_labels.argmax(1))
+            # total_error = zero_one_loss(self.predict(X), y)
 
             if (
                 self.early_stop_thresh is not None
-                and total_error <= self.early_stop_thresh
+                and zero_one_loss(self.predict(X), y.argmax(1)) <= self.early_stop_thresh
             ):
                 finish = True
 
@@ -240,7 +243,7 @@ class ReluNetClassifier(ReLuNet, ClassifierMixin):
         """
         Trains the pytorch ReLU network classifier
         """
-        self._build_model(X.shape[1], len(np.unique(y)))
+        self._build_model(X.shape[1], y.shape[1])
 
         # y = self._reshape_targets(y)
         self._train_model(X, y)
@@ -339,11 +342,11 @@ class ReluNetRegressor(ReLuNet, RegressorMixin):
             ).numpy()
 
             error = mean_squared_error(y_pred_results, y_labels)
-            total_error = mean_squared_error(self.predict(X), y)
+            # total_error = mean_squared_error(self.predict(X), y)
 
             if (
                 self.early_stop_thresh is not None
-                and total_error <= self.early_stop_thresh
+                and mean_squared_error(self.predict(X), y) <= self.early_stop_thresh
             ):
                 finish = True
 
@@ -399,6 +402,88 @@ class ReluNetRegressor(ReLuNet, RegressorMixin):
         """
         y_pred = self.predict(X, y)
         return mean_squared_error(y, y_pred)
+
+
+class KaleabNet(ReLuNet):
+    def _build_model(self, input_dim, output_dim):
+        self._layer_dims = [input_dim] + self.hidden_layer_dims + [output_dim]
+
+        self.model_ = torch.nn.Sequential()
+
+        # Loop through the layer dimensions and create an input layer, then
+        # create each hidden layer with relu activation.
+        for idx, dim in enumerate(self._layer_dims):
+            if idx < len(self._layer_dims) - 1:
+                module = torch.nn.Linear(dim, self._layer_dims[idx + 1], bias=self.bias)
+                init.xavier_uniform_(module.weight)
+                self.model_.add_module("linear" + str(idx), module)
+
+            if idx < len(self._layer_dims) - 2:
+                self.model_.add_module("relu" + str(idx), torch.nn.ReLU())
+
+        if self.gpu_:
+            self.model_ = self.model_.cuda()
+
+
+    def _train_model(self, X, y):
+        torch_x = torch.from_numpy(X).float()
+        torch_y = torch.from_numpy(y).float()
+        if self.gpu_:
+            torch_x = torch_x.cuda()
+            torch_y = torch_y.cuda()
+
+        optimizer = torch.optim.Adam(self.model_.parameters(), lr=self.learning_rate)
+        loss_func = torch.nn.BCEWithLogitsLoss()
+
+        self.history_ = {"BCE": []}
+
+        for step in range(self.n_epochs):
+            optimizer.zero_grad()
+            outputs = self.model_(torch_x)
+
+            loss = loss_func(outputs, torch_y)
+            trainL = loss.detach().item()
+            if self.verbose and (step % 500 == 0):
+                print("train loss = ", trainL)
+            self.history_["BCE"].append(trainL)
+            loss.backward()
+            optimizer.step()
+
+        return self
+
+    def fit(self, X, y):
+        """
+        Trains the pytorch ReLU network classifier
+        """
+        self._build_model(X.shape[1], y.shape[1])
+
+        # y = self._reshape_targets(y)
+        self._train_model(X, y)
+
+        return self
+
+    def predict(self, X, y=None):
+        """
+        Makes a class prediction using the trained model
+        """
+        if self.history_ is None:
+            raise RuntimeError("Classifier has not been fit")
+
+        return self.predict_proba(X, y).argmax(1)
+
+    def predict_proba(self, X, y=None):
+        """
+        Predicts class probabilities using the trained pytorch model
+        """
+        if self.history_ is None:
+            raise RuntimeError("Classifier has not been fit")
+
+        x_pred = Variable(torch.from_numpy(X).float())
+        y_pred = self.model_(x_pred.cuda() if self.gpu_ else x_pred)
+        with torch.no_grad():
+            return torch.nn.functional.softmax(
+                    y_pred.cpu() if self.gpu_ else y_pred, dim=1
+                ).numpy()
 
 
 class RandomReluTransform(TransformerMixin):
