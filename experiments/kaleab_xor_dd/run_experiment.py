@@ -86,11 +86,11 @@ DEPTH_FOREST_PARAMS = {
 }
 
 SHALLOW_FOREST_PARAMS = {
-    "n_estimators": [1],#, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
     "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": list(range(1, 25)), # [25], # 
+    "max_depth": [40], # list(range(1, 25)), # 
     "n_jobs": [-2],
 }
 
