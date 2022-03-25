@@ -90,7 +90,7 @@ SHALLOW_FOREST_PARAMS = {
     "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [40], # list(range(1, 25)), # 
+    "max_depth": [2], # list(range(1, 25)), # 
     "n_jobs": [-2],
 }
 
