@@ -72,12 +72,12 @@ TREE_PARAMS = {
 }
 
 FOREST_PARAMS = {
-    "n_estimators": [20], # [1, 2, 3, 4, 5, 10, 15, 20],
+    "n_estimators": [1, 2, 3, 4, 5, 10, 15, 20],
     # "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
     "max_features": ['sqrt'],
-    "max_depth": [6, 8, 10, 15, 25] + [None], # [5], # [None], # list(range(1, 25)) + [None], # 
+    "max_depth": [2, 4, 5, 6, 8, 10, 15, 25] + [None], # [5], # [None], # list(range(1, 25)) + [None], # 
     "n_jobs": [-2],
 }
 
@@ -594,8 +594,8 @@ def main(args):
 
             # Iterate over models
             for model_params in model_params_grid:
-                # if args.model == 'forest' and model_params['n_estimators'] > 1 and model_params['max_depth'] != None:
-                #     continue
+                if args.model == 'forest' and model_params['n_estimators'] > 1 and model_params['max_depth'] != None:
+                    continue
 
                 save_path = None
                 if args.save_models:
