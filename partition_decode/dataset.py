@@ -35,7 +35,7 @@ def generate_gaussian_parity(
         The standard deviation of the blobs.
 
     angle_params: float, default=None
-        Number of radians to rotate the distribution by.
+        Number of degrees to rotate the distribution by.
 
     random_state : int, RandomState instance, default=None
         Determines random number generation for dataset creation. Pass an int

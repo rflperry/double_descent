@@ -55,6 +55,16 @@ DATA_PARAMS_DICT = {
         "noise_dims": [0],
         "shuffle_label_frac": [None]
     },
+    "xor90" : {
+        "n_train_samples": [N_TRAIN_SAMPLES],  # [4096],
+        "n_test_samples": [N_TEST_SAMPLES],
+        "recurse_level": [0],
+        "angle_params" : [45],
+        "cov_scale": [1],
+        "onehot": [True],
+        "noise_dims": [0],
+        "shuffle_label_frac": [None]
+    },
     "trunk" : {
         "n_train_samples": [N_TRAIN_SAMPLES], 
         "n_test_samples": [N_TEST_SAMPLES],
@@ -86,11 +96,11 @@ DEPTH_FOREST_PARAMS = {
 }
 
 SHALLOW_FOREST_PARAMS = {
-    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
-    "max_features": [1],
+    "n_estimators": [100, 200], # [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
+    "max_features": ['sqrt'],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [2], # list(range(1, 25)), # 
+    "max_depth": [2, 5, 15, 40, None], # list(range(1, 25)), # 
     "n_jobs": [-2],
 }
 
@@ -202,6 +212,15 @@ def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, oneh
         )
     elif dataset == "trunk":
         X, y = samples_trunk(n_samples = n_samples, dims=data_params["dims"], random_state=random_state)
+    elif dataset == "xor90":
+        X, y = generate_gaussian_parity(
+            n_samples=n_samples,
+            # recurse_level=data_params["recurse_level"],
+            angle_params=data_params["angle_params"],
+            random_state=random_state,
+            cov_scale=data_params["cov_scale"],
+            noise_dims=data_params["noise_dims"],
+        )
 
     if onehot and y.ndim == 1:
         new_y = np.zeros((y.shape[0], len(np.unique(y))))
@@ -489,7 +508,7 @@ if __name__ == "__main__":
         "--model", choices=["tree", "deep_forest", "shallow_forest", "knn", "rrf", "wide_relu", "deep_relu", 'relu'], help="Experiment to run"
     )
     parser.add_argument(
-        "--dataset", choices=["xor", "spiral", "mnist", "trunk"], help="Experiment to run"
+        "--dataset", choices=["xor", "spiral", "mnist", "trunk", "xor90"], help="Experiment to run"
     )
     parser.add_argument("--n_reps", type=int, default=3)
     parser.add_argument("--output_dir", type=str, default=None)
