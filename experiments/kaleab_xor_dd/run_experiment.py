@@ -50,7 +50,7 @@ DATA_PARAMS_DICT = {
         "n_train_samples": [N_TRAIN_SAMPLES],  # [4096],
         "n_test_samples": [N_TEST_SAMPLES],
         "recurse_level": [0],
-        "cov_scale": [1],
+        "cov_scale": [0.15],
         "onehot": [True],
         "noise_dims": [0],
         "shuffle_label_frac": [None]
@@ -60,15 +60,15 @@ DATA_PARAMS_DICT = {
         "n_test_samples": [N_TEST_SAMPLES],
         "recurse_level": [0],
         "angle_params" : [45],
-        "cov_scale": [1],
+        "cov_scale": [0.15],
         "onehot": [True],
         "noise_dims": [0],
         "shuffle_label_frac": [None]
     },
     "trunk" : {
-        "n_train_samples": [N_TRAIN_SAMPLES], 
+        "n_train_samples": [100], 
         "n_test_samples": [N_TEST_SAMPLES],
-        "dims": [100],
+        "dims": [1000],
         "onehot": [True],
         "shuffle_label_frac": [None],
     },
@@ -96,11 +96,11 @@ DEPTH_FOREST_PARAMS = {
 }
 
 SHALLOW_FOREST_PARAMS = {
-    "n_estimators": [100, 200], # [1, 2, 3, 4, 5, 7, 10, 13, 16, 20],
-    "max_features": ['sqrt'],
+    "n_estimators": [1, 2, 3, 4, 5, 7, 10, 13, 16, 20, 40],
+    "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [2, 5, 15, 40, None], # list(range(1, 25)), # 
+    "max_depth": [2, 5, 15, 40], # list(range(1, 25)), # 
     "n_jobs": [-2],
 }
 
