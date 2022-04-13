@@ -51,7 +51,7 @@ DATA_PARAMS_DICT = {
         "n_train_samples": [N_TRAIN_SAMPLES],  # [4096],
         "n_test_samples": [N_TEST_SAMPLES],
         "recurse_level": [0],
-        "cov_scale": [0.15],
+        "cov_scale": [1],
         "onehot": [True],
         "noise_dims": [0],
         "shuffle_label_frac": [None]
@@ -92,7 +92,7 @@ DEPTH_FOREST_PARAMS = {
     "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": list(range(1, 30)), # 
+    "max_depth": list(range(1, 25)), # 
     "n_jobs": [-2],
 }
 
@@ -101,7 +101,7 @@ SHALLOW_FOREST_PARAMS = {
     "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [1, 2, 5, 15, 40], # list(range(1, 25)), # 
+    "max_depth": [5], # list(range(1, 25)), # 
     "n_jobs": [-2],
 }
 
