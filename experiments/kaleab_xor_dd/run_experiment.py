@@ -13,6 +13,7 @@ from sklearn.metrics import zero_one_loss, mean_squared_error
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 from joblib import Parallel, delayed
+import os
 
 from partition_decode.dataset import (
     generate_gaussian_parity,
@@ -100,7 +101,7 @@ SHALLOW_FOREST_PARAMS = {
     "max_features": [1],
     # "splitter": ['random'],
     "bootstrap": [False],
-    "max_depth": [2, 5, 15, 40], # list(range(1, 25)), # 
+    "max_depth": [1, 2, 5, 15, 40], # list(range(1, 25)), # 
     "n_jobs": [-2],
 }
 
@@ -237,6 +238,20 @@ def load_Xy_data(dataset, n_samples, random_state, data_params, train=None, oneh
     return X, y
 
 
+def get_posterior_map(clf, regressor=False):
+    xx, yy = np.meshgrid(
+        np.arange(-3, 3, 0.1),
+        np.arange(-3, 3, 0.1))
+    if regressor:
+        Z = clf.predict(np.c_[xx.ravel(), yy.ravel()])
+    else:
+        Z = clf.predict_proba(np.c_[xx.ravel(), yy.ravel()])
+    if Z.ndim > 1 and Z.shape[1] > 1:
+        Z = Z[:, 0]
+    Z = Z.reshape(xx.shape)
+    return Z
+
+
 def run_forest(X_train, y_train, X_test, model_params, model=None, save_path=None):
     from sklearn.ensemble import RandomForestRegressor
     model_params = model_params.copy()
@@ -249,12 +264,14 @@ def run_forest(X_train, y_train, X_test, model_params, model=None, save_path=Non
     y_train_pred = model.predict(X_train)
     y_test_pred = model.predict(X_test)
 
+    Z = get_posterior_map(model, regressor=True)
+
     irm = get_forest_irm(model, X_train)
 
     model_metrics = get_eigenval_metrics(irm, eval_divisor=model.n_estimators)
     model_metrics += [np.sum([tree.get_n_leaves() for tree in model.estimators_])]
 
-    return model, y_train_pred, y_test_pred, model_metrics
+    return model, y_train_pred, y_test_pred, model_metrics, Z
 
 
 def run_relu_classifier(X_train, y_train, X_test, model_params, prior_model=None, save_path=None):
@@ -286,6 +303,8 @@ def run_relu_classifier(X_train, y_train, X_test, model_params, prior_model=None
     y_train_pred = model.predict_proba(X_train)
     y_test_pred = model.predict_proba(X_test)
 
+    Z = get_posterior_map(model, regressor=False)
+
     irm = model.get_internal_representation(X_train, penultimate=False)
     pen_irm = model.get_internal_representation(X_train, penultimate=True, binary=False)
 
@@ -307,7 +326,7 @@ def run_relu_classifier(X_train, y_train, X_test, model_params, prior_model=None
     if save_path is not None:
         torch.save(model.model_.state_dict(), save_path)
 
-    return model, y_train_pred, y_test_pred, model_metrics
+    return model, y_train_pred, y_test_pred, model_metrics, Z
 
 
 """
@@ -478,11 +497,11 @@ def main(args):
                 save_path = None
                 if args.save_models:
                     save_path = Path(args.output_dir) / "models" / f"{args.dataset}_{args.model}_model_{save_idx}.pkl"
-                    save_idx += 1
+
                 # Train and test model
-                model, y_train_pred, y_test_pred, model_metrics = run_model(
+                model, y_train_pred, y_test_pred, model_metrics, posteriors = run_model(
                     X_train, y_train, X_test, model_params, model, save_path
-                )            
+                )
 
                 # Compute metrics
                 results = (
@@ -497,6 +516,13 @@ def main(args):
                 # Dynamically write results to csv
                 f.write(",".join(map(str, results)) + "\n")
                 f.flush()
+
+                directory = Path(args.output_dir) / f"{args.dataset}_{args.model}_posteriors"
+                if not os.path.exists(directory):
+                    os.makedirs(directory)
+
+                np.save(directory / f"posterior_map_{save_idx}", posteriors)
+                save_idx += 1
 
     print("Completed")
 
